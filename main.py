@@ -1,6 +1,14 @@
-#import
-#import
-#import
+#import numpy
+#import pandas
+#import 
 
 
-print("hello world")
+print("Fund Optimizer")
+
+#input excel/data
+#make something (sorting) happen with the data
+
+#algo results 
+
+
+
