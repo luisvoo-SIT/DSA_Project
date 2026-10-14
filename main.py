@@ -185,7 +185,7 @@ def main():
     ap.add_argument("--budget", type=float, help="total restock funds (default: 50%% of full request)")
     ap.add_argument("--horizon", type=int, default=30, help="planning days (default 30)")
     ap.add_argument("--lots", type=int, default=4, help="lots per item (default 4)")
-    ap.add_argument("--unit", type=float, default=0.5, help="DP fund granularity in $ (default 0.5)")
+    ap.add_argument("--unit", type=float, default=0.5, help="Knapsack fund granularity in $ (default 0.5)")
     ap.add_argument("--stock-age", type=float, default=0.5,
                     help="assumed fraction of shelf life already used by stock on hand (default 0.5)")
     ap.add_argument("--search", help="linear-search items by name/category and exit")
@@ -216,13 +216,13 @@ def main():
         return
 
     print(f"{'Method':<8}{'Spent':>10}{'Exp. profit':>13}{'Profit/$':>10}")
-    for name, ch in (("Greedy", g), ("DP", d)):
+    for name, ch in (("Greedy", g), ("Knapsack", d)):
         sp, pf = sum(l.cost for l in ch), sum(l.value for l in ch)
         print(f"{name:<8}{sp:>10,.2f}{pf:>13,.2f}{pf / sp if sp else 0:>10.2f}")
 
-    final = d                                          # DP is the optimised plan
+    final = d                                          # Knapsack is the optimised plan
     plan = summarise(final)
-    print("\nFund split per shop (DP):")
+    print("\nFund split per shop (Knapsack):")
     by_shop = defaultdict(float)
     for (shop, _), (_, cost, _) in plan.items():
         by_shop[shop] += cost
@@ -239,7 +239,7 @@ def main():
                   f"{it.units_at_risk:>9.1f}{it.units_at_risk * it.cost:>9.2f}")
 
     # Items funded in full vs partially vs not at all, ranked by priority
-    print("\nTop restock priorities (DP):")
+    print("\nTop restock priorities (Knapsack):")
     print(f"  {'shop':<10}{'item':<24}{'stock':>6}{'cover':>7}{'order':>7}{'cost':>9}{'profit':>9}")
     rows = []
     for shops_items in shops.values():
