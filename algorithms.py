@@ -102,27 +102,43 @@ def forecast_next(history):
 
 
 # ───────────────────────── Priority queue: FEFO batch simulation ─────────────────────────
-def simulate(stock, rem_life, demand, order_q, lead, shelf, horizon):
+def simulate(batches, demand, order_q, lead, shelf, horizon):
     """
-    Day-by-day simulation. Batches sit in a min-heap keyed by expiry day, so the
-    soonest-expiring batch is sold first (FEFO) and expired batches pop off as waste.
+    Day-by-day simulation of selling stock, using a min-heap as a priority queue.
+
+    batches : list of (days_to_expiry, qty) for stock already on the shelf.
+              days_to_expiry = days left before that batch can no longer be sold.
+              qty            = units in that batch.
+              e.g. [(3, 20), (60, 12)] -> 20 units expire in 3 days, 12 units in 60 days.
+    demand  : forecast units sold per day
+    order_q : units ordered now; they arrive on day `lead` with a fresh `shelf`-day life
+    horizon : number of days simulated
+
+    How the heap is used:
+      * Every batch is pushed as (expiry_day, qty). A heap always pops the SMALLEST
+        expiry_day first, so the batch closest to expiring is always on top.
+      * Each day: (1) a newly arrived order is pushed, (2) any batch whose expiry_day <= today
+        is popped and counted as waste, (3) demand is served from the top of the heap
+        (First-Expired-First-Out), so old stock sells before fresh stock.
+      * Demand that finds an empty heap is counted as lost sales (stockout).
+
     Returns (units_sold, units_lost, units_wasted).
     """
-    heap = [(rem_life, float(stock))] if stock > 0 else []
+    heap = [(d, float(q)) for d, q in batches if q > 0]
     heapq.heapify(heap)
     sold = lost = waste = 0.0
-    for d in range(horizon):
-        if order_q > 0 and d == lead:
-            heapq.heappush(heap, (d + shelf, float(order_q)))
-        while heap and heap[0][0] <= d:
+    for day in range(horizon):
+        if order_q > 0 and day == lead:
+            heapq.heappush(heap, (day + shelf, float(order_q)))   # new batch, fresh shelf life
+        while heap and heap[0][0] <= day:                          # expired -> waste
             waste += heapq.heappop(heap)[1]
         need = demand
-        while need > 1e-9 and heap:
+        while need > 1e-9 and heap:                                # sell soonest-expiring first
             exp, q = heapq.heappop(heap)
             take = min(q, need)
             sold += take; need -= take; q -= take
             if q > 1e-9:
-                heapq.heappush(heap, (exp, q))
+                heapq.heappush(heap, (exp, q))                     # leftover stays in the queue
         lost += need
     return sold, lost, waste
 
