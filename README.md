@@ -5,4 +5,4 @@ Tan Chee Hui
 Ethan (balls pulled)
 
 
-command to run : python main.py shop_inventory.csv --budget 800   
+command to run : python main.py shop_inventory.csv --budget 500
