@@ -1,21 +1,21 @@
 shop,item_id,item_name,current_stock,forecast_daily_demand,cover_days,days_to_expiry,expiring_qty,units_at_risk,order_qty,order_cost,expected_profit,regression_used
-shop_inventory,I005,Green Tea 500ml,32,6.3,5.1,3,20,1.1,0,0.0,0.0,False
-shop_inventory,I013,Shampoo,7,5.8,1.2,233,4,0.0,0,0.0,0.0,False
-shop_inventory,I006,Potato Chips,22,8.0,2.8,6,18,0.0,0,0.0,0.0,False
-shop_inventory,I014,Soap,65,10.3,6.3,94,39,0.0,0,0.0,0.0,False
-shop_inventory,I007,Chocolate Bar,35,8.8,4.0,9,12,0.0,64,51.2,69.12,False
-shop_inventory,I015,Toothpaste,28,5.5,5.1,172,16,0.0,0,0.0,0.0,False
-shop_inventory,I008,Cookies,40,6.2,6.5,4,30,5.2,124,124.0,163.68,False
-shop_inventory,I016,Tissue Pack,45,9.7,4.6,265,19,0.0,0,0.0,0.0,False
-shop_inventory,I009,Instant Noodles,70,11.0,6.4,53,22,0.0,148,96.2,115.74,False
-shop_inventory,I017,Notebook,30,4.8,6.2,896,20,0.0,0,0.0,0.0,False
-shop_inventory,I018,Ballpoint Pen,120,12.0,10.0,1145,41,0.0,208,52.0,102.96,False
-shop_inventory,I019,A4 Paper 500 Sheets,18,2.7,6.7,1234,6,0.0,0,0.0,0.0,False
-shop_inventory,I001,Monster Energy 500ml,4,14.0,0.3,73,1,0.0,0,0.0,0.0,False
-shop_inventory,I002,Coca-Cola 500ml,18,9.3,1.9,57,7,0.0,0,0.0,0.0,False
-shop_inventory,I010,Rice 5kg,15,3.2,4.7,100,6,0.0,0,0.0,0.0,False
-shop_inventory,I003,Pepsi 500ml,25,7.0,3.6,39,15,0.0,0,0.0,0.0,False
-shop_inventory,I011,Canned Tuna,12,4.7,2.6,104,6,0.0,0,0.0,0.0,False
-shop_inventory,I004,Mineral Water 600ml,60,17.3,3.5,67,32,0.0,384,172.8,276.48,False
-shop_inventory,I012,Cooking Oil 1L,19,5.2,3.7,152,7,0.0,0,0.0,0.0,False
-shop_inventory,I020,USB Flash Drive 64GB,10,2.2,4.5,1160,5,0.0,0,0.0,0.0,False
+shop_inventory,9,Instant Noodles,70,11.0,6.4,53,22,0.0,148,96.2,115.74,False
+shop_inventory,10,Rice 5kg,15,3.2,4.7,100,6,0.0,0,0.0,0.0,False
+shop_inventory,11,Canned Tuna,12,4.7,2.6,104,6,0.0,0,0.0,0.0,False
+shop_inventory,12,Cooking Oil 1L,19,5.2,3.7,152,7,0.0,0,0.0,0.0,False
+shop_inventory,20,USB Flash Drive 64GB,10,2.2,4.5,1160,5,0.0,0,0.0,0.0,False
+shop_inventory,13,Shampoo,7,5.8,1.2,233,4,0.0,0,0.0,0.0,False
+shop_inventory,14,Soap,65,10.3,6.3,94,39,0.0,207,155.25,195.62,False
+shop_inventory,15,Toothpaste,28,5.5,5.1,172,16,0.0,0,0.0,0.0,False
+shop_inventory,16,Tissue Pack,45,9.7,4.6,265,19,0.0,0,0.0,0.0,False
+shop_inventory,17,Notebook,30,4.8,6.2,896,20,0.0,33,39.6,43.3,False
+shop_inventory,18,Ballpoint Pen,120,12.0,10.0,1145,41,0.0,208,52.0,102.96,False
+shop_inventory,19,A4 Paper 500 Sheets,18,2.7,6.7,1234,6,0.0,0,0.0,0.0,False
+shop_inventory,1,Monster Energy 500ml,4,14.0,0.3,73,1,0.0,0,0.0,0.0,False
+shop_inventory,2,Coca-Cola 500ml,18,9.3,1.9,57,7,0.0,0,0.0,0.0,False
+shop_inventory,3,Pepsi 500ml,25,7.0,3.6,39,15,0.0,0,0.0,0.0,False
+shop_inventory,4,Mineral Water 600ml,60,17.3,3.5,67,32,0.0,384,172.8,276.48,False
+shop_inventory,5,Green Tea 500ml,32,6.3,5.1,3,20,1.1,0,0.0,0.0,False
+shop_inventory,6,Potato Chips,22,8.0,2.8,6,18,0.0,0,0.0,0.0,False
+shop_inventory,7,Chocolate Bar,35,8.8,4.0,9,12,0.0,192,153.6,207.36,False
+shop_inventory,8,Cookies,40,6.2,6.5,4,30,5.2,124,124.0,163.68,False
