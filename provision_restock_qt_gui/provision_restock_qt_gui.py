@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pandas as pd
 from PySide6.QtCore import Qt, QRectF, QPointF
-from PySide6.QtGui import QColor, QBrush, QPen, QFont, QPainter
+from PySide6.QtGui import QColor, QBrush, QPen, QFont, QPainter, QPolygonF
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QPushButton, QFileDialog, QDoubleSpinBox, QTableWidget,
@@ -48,141 +48,214 @@ COLORS = {
 def money(value: float) -> str:
     return f"${value:,.2f}"
 
+class ClickableFlowNode(QGraphicsRectItem):
+    """A clickable flowchart node with a detail panel supplied by its tooltip."""
+    def __init__(self, rect, title, detail, fill, border, on_click):
+        super().__init__(rect)
+        self.title = title
+        self.detail = detail
+        self.on_click = on_click
+        self.setBrush(QBrush(QColor(fill)))
+        self.setPen(QPen(QColor(border), 2))
+        self.setToolTip(f"{title}\n\n{detail}\n\nClick for details")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsSelectable, True)
+
+    def mousePressEvent(self, event):
+        if self.on_click:
+            self.on_click(self.title, self.detail)
+        super().mousePressEvent(event)
+
+
 class FlowchartView(QGraphicsView):
-    """A non-interactive flowchart view; nodes are regenerated after each analysis."""
-    def __init__(self):
-        super().__init__()
+    """Data-driven, clickable flowchart with zoom and hand-drag panning."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
         self.setScene(QGraphicsScene(self))
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.setBackgroundBrush(QColor("#F7FAFC"))
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
         self.setMinimumHeight(520)
+        self._zoom = 1.0
+
+    def wheelEvent(self, event):
+        # Ctrl+wheel zooms; ordinary wheel scrolling remains available.
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            factor = 1.15 if event.angleDelta().y() > 0 else 1 / 1.15
+            new_zoom = self._zoom * factor
+            if 0.25 <= new_zoom <= 3.5:
+                self.scale(factor, factor)
+                self._zoom = new_zoom
+            event.accept()
+        else:
+            super().wheelEvent(event)
+
+    def reset_zoom(self):
+        self._zoom = 1.0
+        self.resetTransform()
+        self.fitInView(self.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
+    def _node_clicked(self, title, detail):
+        QMessageBox.information(self, title, detail)
 
     def draw_flowchart(self, state: dict):
+        """Render a labelled, data-driven workflow with the actual path highlighted."""
         scene = self.scene()
         scene.clear()
-        W, H = 1180, 850
-        scene.setSceneRect(0, 0, W, H)
-
-        title = scene.addText("PROVISION SHOP RESTOCKING — EXECUTION FLOW")
+        scene.setBackgroundBrush(QColor("#F7FAFC"))
+        title = scene.addText("PROVISION SHOP RESTOCKING — LIVE EXECUTION FLOW")
+        title.setPos(24, 12); title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         title.setDefaultTextColor(QColor(COLORS["navy"]))
-        title.setFont(QFont("Arial", 15, QFont.Weight.Bold))
-        title.setPos(24, 14)
-
-        subtitle = scene.addText(state.get("subtitle", "Load a CSV and run analysis to generate the execution path."))
+        subtitle = scene.addText(state.get("subtitle", "Load a CSV and run analysis."))
+        subtitle.setPos(25, 42); subtitle.setFont(QFont("Arial", 9))
         subtitle.setDefaultTextColor(QColor(COLORS["muted"]))
-        subtitle.setFont(QFont("Arial", 9))
-        subtitle.setPos(25, 43)
 
-        # Fixed stage positions make the flow easy to read; branch visibility/content is data-driven.
-        nodes = [
-            ("start", "START", 35, 100, 160, 54, "green", "ellipse"),
-            ("csv", "Load inventory CSV\\n(all outlets / batches)", 245, 100, 205, 62, "blue", "io"),
-            ("validate", "Validate required columns\\nand numeric values", 500, 100, 220, 62, "blue", "rect"),
-            ("decision", "CSV valid?", 790, 100, 150, 62, "yellow", "diamond"),
-            ("process", "Combine records + calculate\\nstock, demand and expiry risk", 500, 245, 250, 72, "teal", "rect"),
-            ("lookup", "Product lookup\\nBalanced tree / linear search", 500, 365, 250, 66, "green", "rect"),
-            ("expiry", "Expiry management\\nPriority queue: earliest batch first", 500, 475, 250, 66, "green", "rect"),
-            ("forecast", "Demand forecast\\nLinear regression + merge-sort ranking", 500, 585, 250, 72, "yellow", "rect"),
-            ("allocation", "Budget allocation\\nGreedy vs. knapsack DP", 820, 585, 240, 72, "orange", "rect"),
-            ("budget", "Within budget?", 860, 700, 160, 58, "yellow", "diamond"),
-            ("output", "Restocking plan + report\\nquantities, spend, profit, risk", 500, 755, 250, 65, "purple", "io"),
+        valid = bool(state.get("valid", True))
+        analysed = bool(state.get("analysed", False))
+        expiry_count = int(state.get("expiry_count", 0))
+        candidate_count = int(state.get("candidate_count", 0))
+        under_budget = bool(state.get("under_budget", True))
+        method = state.get("selected_method", "Knapsack DP")
+
+        # node: key, label, x, y, w, h, kind, executed, detail, status
+        specs = [
+            ("start", "START", 455, 78, 150, 48, "start", True, "Restocking workflow begins.", "normal"),
+            ("load", "Load inventory CSV\n(all outlets / batches)", 420, 158, 220, 64, "process", True, "Load the inventory CSV. Edit, add, or delete batch rows in the Inventory tab, then save if required.", "normal"),
+            ("validate", "Validate required columns\nand numeric values", 420, 260, 220, 64, "process", (analysed or not valid), state.get("validation_detail", "Check required columns and numeric fields."), "normal"),
+            ("decision", "CSV valid?", 465, 360, 130, 70, "decision", (analysed or not valid), "YES continues processing. NO returns to loading/correcting the CSV.", "normal"),
+            ("aggregate", "Combine records + calculate\nstock, demand and expiry risk", 420, 470, 220, 68, "process", analysed and valid, state.get("aggregate_detail", "Combine batches by product and calculate stock, demand and expiry risk."), "normal"),
+            ("lookup", "Product lookup\nBalanced search tree only", 420, 570, 220, 64, "process", analysed and valid, state.get("lookup_detail", "Use a balanced search tree for product lookup; no linear-search alternative is used in this workflow."), "normal"),
+            ("expiry", "Expiry management\nPriority queue: earliest batch first", 420, 666, 220, 68, "process", analysed and valid, state.get("expiry_detail", "Prioritise batches by earliest expiry date/duration."), "normal"),
+            ("forecast", "Demand forecast + ranking\nLinear regression + merge sort", 420, 766, 220, 68, "process", analysed and valid, state.get("forecast_detail", "Forecast demand with linear regression, then rank products using merge sort."), "normal"),
+            ("optimise", "Budget allocation\nGreedy or Knapsack DP", 760, 766, 230, 68, "process", analysed and valid, state.get("optimise_detail", "Greedy is fast and suitable for ranking-based incremental allocation. Knapsack DP is better for discrete choices under a hard budget when maximising total value; it can cost more time and memory. The selected method is shown in the node."), "normal"),
+            ("budget", "Within budget?", 810, 875, 130, 70, "decision", analysed and valid, state.get("budget_detail", "Compare selected order cost with the budget."), "normal"),
+            ("output", "Option: export restocking plan\nQuantities, spend, profit, risk", 420, 990, 240, 70, "output", analysed and valid and under_budget, state.get("output_detail", "Export the final restocking plan and report."), "normal"),
+            ("adjust", "Over budget: adjust selections,\nreduce quantities or raise budget", 760, 990, 260, 70, "error", analysed and valid and not under_budget, state.get("budget_detail", "Adjust selected items, reduce quantities, or revise the budget, then redo budget allocation."), "error"),
         ]
-        if not state.get("valid", True):
-            nodes = [n for n in nodes if n[0] not in {"process", "lookup", "expiry", "forecast", "allocation", "budget", "output"}]
-            nodes.append(("error", "Show validation errors\\nand request corrected CSV", 980, 100, 175, 62, "red", "rect"))
-        else:
-            nodes.append(("retry", "Adjust selection / reduce quantities\\nthen recalculate", 930, 785, 210, 52, "red", "rect"))
-
-        # Add node shapes and text.
-        centers = {}
-        for key, label, x, y, w, h, color_key, shape in nodes:
-            fill = QColor(COLORS[color_key])
-            pen = QPen(QColor(COLORS["border"]), 1.5)
-            if shape == "ellipse":
-                item = QGraphicsEllipseItem(QRectF(x, y, w, h))
-            elif shape == "diamond":
-                points = [QPointF(x+w/2, y), QPointF(x+w, y+h/2), QPointF(x+w/2, y+h), QPointF(x, y+h/2)]
-                from PySide6.QtGui import QPolygonF
-                item = QGraphicsPolygonItem(QPolygonF(points))
-            elif shape == "io":
-                from PySide6.QtGui import QPolygonF
-                points = [QPointF(x+18, y), QPointF(x+w, y), QPointF(x+w-18, y+h), QPointF(x, y+h)]
-                item = QGraphicsPolygonItem(QPolygonF(points))
+        nodes = {}
+        def palette(executed, kind, status):
+            if status == "error": return ("#FFE0E3", "#B42332")
+            if executed: return (("#EAE2FF", "#7048B8") if kind == "output" else ("#DDF5E5", "#16803D"))
+            return ("#E8EDF1", "#9AA9B5")
+        for key,label,x,y,w,h,kind,executed,detail,status in specs:
+            fill,border=palette(executed,kind,status)
+            if kind == "start":
+                item=scene.addEllipse(QRectF(x,y,w,h),QPen(QColor(border),2),QBrush(QColor(fill)))
+            elif kind == "decision":
+                poly=QPolygonF([QPointF(x+w/2,y),QPointF(x+w,y+h/2),QPointF(x+w/2,y+h),QPointF(x,y+h/2)])
+                item=scene.addPolygon(poly,QPen(QColor(border),2),QBrush(QColor(fill)))
+            elif kind == "output":
+                poly=QPolygonF([QPointF(x+14,y),QPointF(x+w,y),QPointF(x+w-14,y+h),QPointF(x,y+h)])
+                item=scene.addPolygon(poly,QPen(QColor(border),2),QBrush(QColor(fill)))
             else:
-                item = QGraphicsRectItem(QRectF(x, y, w, h))
-            item.setBrush(QBrush(fill))
-            item.setPen(pen)
-            scene.addItem(item)
-            text = scene.addText(label)
-            text.setDefaultTextColor(QColor(COLORS["text"]))
-            text.setFont(QFont("Arial", 9, QFont.Weight.DemiBold))
-            text.setTextWidth(w - 18)
-            text.setPos(x + 9, y + (h-text.boundingRect().height())/2)
-            centers[key] = (x, y, w, h)
+                item=ClickableFlowNode(QRectF(x,y,w,h),label,detail,fill,border,self._node_clicked)
+            item.setToolTip(f"{label}\n\n{detail}")
+            item.setZValue(1); scene.addItem(item)
+            text=scene.addText(label); text.setFont(QFont("Arial",9,QFont.Weight.DemiBold)); text.setDefaultTextColor(QColor(COLORS["text"]))
+            text.setTextWidth(w-20); text.setPos(x+10,y+(h-text.boundingRect().height())/2); text.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            text.setZValue(1) 
+            nodes[key]=(x,y,w,h)
 
-        def edge(a, b, label=None, color="#285A7A", dashed=False):
-            if a not in centers or b not in centers:
-                return
-            ax, ay, aw, ah = centers[a]
-            bx, by, bw, bh = centers[b]
-            # Orthogonal-ish connector using a vertical/horizontal route.
-            start = QPointF(ax + aw/2, ay + ah)
-            end = QPointF(bx + bw/2, by)
-            if abs(start.x() - end.x()) < 3:
-                line = QGraphicsLineItem(start.x(), start.y(), end.x(), end.y())
-                scene.addItem(line)
-                line.setPen(QPen(QColor(color), 1.7, Qt.PenStyle.DashLine if dashed else Qt.PenStyle.SolidLine))
+        def edge(a,b,label="",active=False,warning=False,mode="down",color=None):
+            if a not in nodes or b not in nodes: return
+            ax,ay,aw,ah=nodes[a]; bx,by,bw,bh=nodes[b]
+            c=color or ("#16803D" if active else ("#B42332" if warning else "#AAB6BF"))
+            pen=QPen(QColor(c),3 if active else 1.6)
+            if not active: pen.setStyle(Qt.PenStyle.DashLine)
+            if mode=="right":
+                p1=QPointF(ax+aw,ay+ah/2); p2=QPointF(bx,by+bh/2); mid=(p1.x()+p2.x())/2
+                pts=[p1,QPointF(mid,p1.y()),QPointF(mid,p2.y()),p2]
+            elif mode=="left":
+                p1=QPointF(ax,ay+ah/2); p2=QPointF(bx+bw,by+bh/2); mid=min(p1.x(),p2.x())-35
+                pts=[p1,QPointF(mid,p1.y()),QPointF(mid,p2.y()),p2]
+            elif mode=="up":
+                p1=QPointF(ax+aw/2,ay); p2=QPointF(bx+bw/2,by+bh); mid=(p1.y()+p2.y())/2
+                pts=[p1,QPointF(p1.x(),mid),QPointF(p2.x(),mid),p2]
             else:
-                mid_y = (start.y() + end.y()) / 2
-                p1 = QGraphicsLineItem(start.x(), start.y(), start.x(), mid_y)
-                p2 = QGraphicsLineItem(start.x(), mid_y, end.x(), mid_y)
-                p3 = QGraphicsLineItem(end.x(), mid_y, end.x(), end.y())
-                pen = QPen(QColor(color), 1.7, Qt.PenStyle.DashLine if dashed else Qt.PenStyle.SolidLine)
-                for p in (p1, p2, p3):
-                    p.setPen(pen)
-                    scene.addItem(p)
+                p1=QPointF(ax+aw/2,ay+ah); p2=QPointF(bx+bw/2,by); mid=(p1.y()+p2.y())/2
+                pts=[p1,QPointF(p1.x(),mid),QPointF(p2.x(),mid),p2]
+            for p1,p2 in zip(pts,pts[1:]): scene.addLine(p1.x(),p1.y(),p2.x(),p2.y(),pen).setZValue(-1)
+            p1,p2=pts[-2],pts[-1]; ang=math.atan2(p2.y()-p1.y(),p2.x()-p1.x()); size=8
+            for d in (-0.55,0.55): scene.addLine(p2.x(),p2.y(),p2.x()-size*math.cos(ang+d),p2.y()-size*math.sin(ang+d),pen).setZValue(-1)
             if label:
-                t = scene.addText(label)
-                t.setDefaultTextColor(QColor(color))
-                t.setFont(QFont("Arial", 8, QFont.Weight.Bold))
-                t.setPos((start.x()+end.x())/2+4, mid_y-18 if abs(start.x()-end.x()) >= 3 else (start.y()+end.y())/2)
+                t=scene.addText(label); t.setFont(QFont("Arial",8,QFont.Weight.Bold)); t.setDefaultTextColor(QColor(c))
+                t.setPos((pts[0].x()+pts[-1].x())/2+3,(pts[0].y()+pts[-1].y())/2-14)
 
-        edge("start", "csv")
-        edge("csv", "validate")
-        edge("validate", "decision")
-        if state.get("valid", True):
-            edge("decision", "process", "YES")
-            edge("process", "lookup")
-            edge("lookup", "expiry")
-            edge("expiry", "forecast")
-            edge("forecast", "allocation")
-            edge("allocation", "budget")
-            edge("budget", "output", "YES")
-            edge("budget", "retry", "NO", color="#B42332")
-            edge("retry", "allocation", "RECALCULATE", color="#B42332", dashed=True)
+        edge("start","load",active=True)
+        edge("load","validate",active=True)
+        edge("validate","decision",active=analysed or not valid)
+        edge("decision","aggregate",label="YES",active=analysed and valid)
+        # Invalid CSV branch loops back to the load/edit stage.
+        if not valid:
+            x,y,w,h=95,350,240,76
+            bad=ClickableFlowNode(QRectF(x,y,w,h),"NO — correct CSV and reload",state.get("validation_detail","Fix missing columns or invalid numeric values, then load/validate again."),"#FFE0E3","#B42332",self._node_clicked)
+            scene.addItem(bad); bad.setZValue(1)
+            t=scene.addText("NO — return to Load inventory"); t.setFont(QFont("Arial",8,QFont.Weight.Bold)); t.setDefaultTextColor(QColor("#B42332")); t.setPos(95,330)
+            edge("decision","load",label="NO / RELOAD",active=False,warning=True,mode="left")
+            scene.addLine(215,350,215,222,QPen(QColor("#B42332"),2,Qt.PenStyle.DashLine))
         else:
-            edge("decision", "error", "NO", color="#B42332")
-            edge("error", "csv", "RE-UPLOAD", color="#B42332", dashed=True)
+            edge("aggregate","lookup",active=analysed)
+            edge("lookup","expiry",active=analysed)
+            edge("expiry","forecast",active=analysed)
+            edge("forecast","optimise",active=analysed,mode="right",label=f"Selected: {method}" if analysed else "choose method")
+            edge("optimise","budget",active=analysed)
+            edge("budget","output",label="YES",active=analysed and under_budget,mode="left")
+            edge("budget","adjust",label="NO",active=analysed and not under_budget,warning=analysed and not under_budget,mode="right")
+            # A retry connector makes the budget reallocation loop explicit.
+            if analysed and not under_budget:
+                scene.addLine(1020,1025,1080,1025,QPen(QColor("#B42332"),2,Qt.PenStyle.DashLine))
+                scene.addLine(1080,1025,1080,800,QPen(QColor("#B42332"),2,Qt.PenStyle.DashLine))
+                scene.addLine(1080,800,990,800,QPen(QColor("#B42332"),2,Qt.PenStyle.DashLine))
+                t=scene.addText("REVISE + REALLOCATE"); t.setFont(QFont("Arial",8,QFont.Weight.Bold)); t.setDefaultTextColor(QColor("#B42332")); t.setPos(990,785)
+            if analysed and expiry_count:
+                x,y,w,h=700,455,330,70
+                detail=state.get("expiry_detail",f"{expiry_count} batch(es) are approaching expiry.")
+                alert=ClickableFlowNode(QRectF(x,y,w,h),f"EXPIRY ALERT: {expiry_count} batch(es)",detail,"#FFF0CC","#D97706",self._node_clicked); scene.addItem(alert); alert.setZValue(1)
+                scene.addItem(alert)
+                alert.setZValue(1)
+                
+                t=scene.addText("Near-expiry batches are flagged before recommendation."); t.setFont(QFont("Arial",8)); t.setDefaultTextColor(QColor("#B45309")); t.setPos(x+8,y+48)
+                t.setPos(x + 8, y + 48)
+                t.setZValue(2)
+                scene.addLine(640,504,700,490,QPen(QColor("#D97706"),2))
+            if analysed:
+                why=state.get("method_reason", "Knapsack DP selected for a hard budget with discrete order choices." if "knapsack" in str(method).lower() else "Greedy selected for a fast priority-based allocation.")
+                x,y,w,h=1010,690,270,95
+                rationale=ClickableFlowNode(QRectF(x,y,w,h),"WHY THIS METHOD?",why,"#DCEEFF",COLORS["border"],self._node_clicked); scene.addItem(rationale); rationale.setZValue(1)
+                scene.addItem(rationale)
+                rationale.setZValue(1)
+                t=scene.addText("Click for method rationale"); t.setFont(QFont("Arial",8)); t.setDefaultTextColor(QColor(COLORS["muted"])); t.setPos(x+8,y+70)
+                t.setPos(x + 8, y + 70)
+                t.setZValue(2)
+                scene.addLine(990,800,1010,738,QPen(QColor(COLORS["border"]),1.5,Qt.PenStyle.DashLine))
 
-        # Data-dependent expiry note.
-        note_y = 215 if state.get("valid", True) else 220
-        note = scene.addText(state.get("expiry_note", "Expiry alert: run analysis to inspect batches."))
-        note.setDefaultTextColor(QColor("#9A3412"))
-        note.setFont(QFont("Arial", 9, QFont.Weight.Bold))
-        note.setTextWidth(390)
-        note.setPos(780, note_y)
-        scene.addRect(QRectF(770, note_y-8, 385, 42), QPen(QColor("#FDBA74"), 1), QBrush(QColor("#FFF7ED")))
-        # Put note above the rectangle so text remains visible.
-        note.setZValue(2)
+        footer=scene.addText("Green = executed path • Amber = expiry warning • Red = invalid CSV / over-budget retry • Grey dashed = inactive • Click nodes for details • Ctrl+wheel zoom • Drag to pan")
+        footer.setFont(QFont("Arial",8)); footer.setDefaultTextColor(QColor(COLORS["muted"])); footer.setPos(24,1090)
+        scene.setSceneRect(scene.itemsBoundingRect().adjusted(-25,-20,30,35))
+        self._zoom=1.0
+        self.fitInView(scene.sceneRect(),Qt.AspectRatioMode.KeepAspectRatio)
 
-        footer = scene.addText("The flowchart is non-interactive; its branches and annotations are regenerated from the loaded CSV and analysis result.")
-        footer.setDefaultTextColor(QColor(COLORS["muted"]))
-        footer.setFont(QFont("Arial", 8))
-        footer.setPos(25, 825)
-        self.fitInView(scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+    def _detail_for(self, key, state):
+        return {
+            "start": "Start the restocking workflow.",
+            "load": "Load inventory CSV for all outlets and batches. Edit, add, or delete rows before analysis.",
+            "validate": state.get("validation_detail", "Validate required columns and numeric values."),
+            "decision": "If valid, continue. If invalid, correct the CSV and return to Load inventory.",
+            "aggregate": state.get("aggregate_detail", "Combine batch records and calculate stock, demand, and expiry risk."),
+            "lookup": state.get("lookup_detail", "Product lookup is via balanced search tree only."),
+            "expiry": state.get("expiry_detail", "Use a priority queue so the earliest-expiring batch is handled first."),
+            "forecast": state.get("forecast_detail", "Use linear regression for demand forecasting and merge sort for ranking."),
+            "optimise": state.get("optimise_detail", "Choose greedy for speed and priority-based allocation, or knapsack DP for a discrete-value optimum under a hard budget."),
+            "budget": state.get("budget_detail", "If over budget, adjust selection/quantities and rerun budget allocation. If within budget, offer plan export."),
+            "output": state.get("output_detail", "Optionally export the final restocking plan."),
+            "adjust": state.get("budget_detail", "Adjust item selection, reduce quantities, or review the budget, then redo budget allocation."),
+        }.get(key, "Workflow step.")
+
 
 class RestockWindow(QMainWindow):
     def __init__(self):
@@ -265,6 +338,13 @@ class RestockWindow(QMainWindow):
 
         flow_tab = QWidget()
         flow_layout = QVBoxLayout(flow_tab)
+        flow_tools = QHBoxLayout()
+        flow_tools.addWidget(QLabel("Ctrl + mouse wheel: zoom • Drag: pan • Click a node: details"))
+        flow_tools.addStretch(1)
+        reset_flow_btn = QPushButton("Fit flowchart")
+        reset_flow_btn.clicked.connect(self.flow_reset_zoom if hasattr(self, "flow_reset_zoom") else lambda: self.flow.reset_zoom())
+        flow_tools.addWidget(reset_flow_btn)
+        flow_layout.addLayout(flow_tools)
         self.flow = FlowchartView()
         flow_layout.addWidget(self.flow)
         self.tabs.addTab(flow_tab, "Generated flowchart")
@@ -280,9 +360,8 @@ class RestockWindow(QMainWindow):
         self.statusBar().showMessage("Load a CSV file to begin.")
         self.apply_style()
         self.flow.draw_flowchart({
-            "valid": True,
+            "valid": True, "analysed": False,
             "subtitle": "Waiting for inventory CSV and analysis.",
-            "expiry_note": "Expiry alert: no inventory has been analysed yet."
         })
 
     def apply_style(self):
@@ -329,9 +408,8 @@ class RestockWindow(QMainWindow):
             self.summary.setPlainText("CSV loaded. Click Run analysis to calculate the restocking recommendation.")
             self.statusBar().showMessage(f"Loaded {len(df)} inventory/batch records.")
             self.flow.draw_flowchart({
-                "valid": True,
+                "valid": True, "analysed": False,
                 "subtitle": f"CSV loaded: {len(df)} rows. Run analysis to generate a data-specific path.",
-                "expiry_note": "CSV loaded; expiry and budget outcomes will appear after analysis."
             })
             self.tabs.setCurrentWidget(self.tabs.widget(0))
         except Exception as exc:
@@ -472,9 +550,9 @@ class RestockWindow(QMainWindow):
         errors = self.validate_data(self.df)
         if errors:
             self.flow.draw_flowchart({
-                "valid": False,
+                "valid": False, "analysed": False,
                 "subtitle": "CSV validation failed: invalid or missing data.",
-                "expiry_note": "Validation errors: " + " ".join(errors[:2])
+                "validation_detail": "\n".join(errors),
             })
             QMessageBox.warning(self, "Invalid data", "\n".join(errors))
             self.tabs.setCurrentWidget(self.tabs.widget(1))
@@ -597,9 +675,20 @@ class RestockWindow(QMainWindow):
         }
 
         self.flow.draw_flowchart({
-            "valid": True,
+            "valid": True, "analysed": True,
             "subtitle": f"CSV valid • {len(df)} batch rows • budget {money(budget)} • selected method: {selected_method}",
-            "expiry_note": expiry_note
+            "expiry_count": len(expiry_rows), "candidate_count": len(candidates),
+            "under_budget": under_budget,
+            "selected_method": selected_method,
+            "method_reason": ("Knapsack DP evaluates discrete item/order choices under a hard budget; use it when maximising total value matters more than speed." if "knapsack" in selected_method.lower() else "Greedy allocates quickly in priority order and is simpler, but may not find the globally best combination under a hard budget."),
+            "validation_detail": f"All {len(df)} rows passed required-column and numeric validation.",
+            "aggregate_detail": f"Grouped {len(df)} batch rows into {grouped['item_id'].nunique()} unique products. Stock and expiry quantities were aggregated per product.",
+            "expiry_detail": expiry_note,
+            "forecast_detail": f"Daily demand × 30 used as the monthly estimate. {len(candidates)} product(s) have a positive recommended quantity.",
+            "candidate_detail": f"{len(candidates)} candidate product(s) passed the positive-recommended-quantity filter.",
+            "optimise_detail": f"Greedy spend: {money(greedy_spend)}; knapsack spend: {money(dp_spend)}. Selected: {selected_method}.",
+            "budget_detail": f"Final spend {money(final_spend)} against budget {money(budget)}. " + ("Within budget." if under_budget else "Exceeds budget."),
+            "output_detail": f"Final estimated spend: {money(final_spend)}; estimated gross profit: {money(final_profit)}; method: {selected_method}.",
         })
         self.build_report(df, grouped, candidates, budget)
         self.export_btn.setEnabled(True)
