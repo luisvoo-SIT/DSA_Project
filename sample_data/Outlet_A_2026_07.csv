@@ -1,0 +1,4 @@
+item_id,item_name,category,unit_cost,unit_sell,current_total_stock,mth_purchase,lead_time,shelf_life,batch_no,supplier_rating
+MILK,Fresh Milk,Dairy,2.00,3.20,12,65,5,35,0526,4.5
+MILK,Fresh Milk,Dairy,2.00,3.20,20,65,5,35,0626,4.5
+RICE,Rice,Staples,8.00,11.00,10,25,5,365,0526,4
