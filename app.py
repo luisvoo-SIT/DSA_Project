@@ -1,12 +1,15 @@
 """Market Expand desktop inventory application."""
 import csv
 import sys
+import pandas as pd
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
 from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (QApplication,QComboBox,QDoubleSpinBox,QFileDialog,QHBoxLayout,QHeaderView,
     QLabel,QLineEdit,QMainWindow,QMessageBox,QPushButton,QTableWidget,QTableWidgetItem,QTabWidget,
-    QVBoxLayout,QWidget)
+    QVBoxLayout,QWidget,QSplitter)
 from inventory import FIELDS, Tree, allocate, expiry_queue, linear_search, load_csv, recommendations
 
 class MainWindow(QMainWindow):
@@ -23,9 +26,21 @@ class MainWindow(QMainWindow):
         self.budget=QDoubleSpinBox(); self.budget.setRange(0,100000000); self.budget.setDecimals(2); self.budget.setValue(100); self.budget.valueChanged.connect(self.recalculate); controls.addWidget(QLabel('Budget:')); controls.addWidget(self.budget)
         self.method=QComboBox(); self.method.addItems(['Greedy','Knapsack']); self.method.currentTextChanged.connect(self.recalculate); controls.addWidget(self.method)
         self.tabs=QTabWidget(); layout.addWidget(self.tabs)
-        self.table=QTableWidget(); self.table.cellChanged.connect(self.edited); self.tabs.addTab(self.table,'Inventory (editable)')
-        self.results=QTableWidget(); self.results.setEditTriggers(QTableWidget.NoEditTriggers); self.tabs.addTab(self.results,'Recommendations')
-        self.expiry=QTableWidget(); self.expiry.setEditTriggers(QTableWidget.NoEditTriggers); self.tabs.addTab(self.expiry,'Expiry queue')
+        inventory_page=QWidget(); inventory_layout=QVBoxLayout(inventory_page)
+        filters=QHBoxLayout(); inventory_layout.addLayout(filters)
+        self.filter_column=QComboBox(); self.filter_column.addItems(['All columns','Outlet','Report month']+list(FIELDS)); filters.addWidget(QLabel('Filter column:')); filters.addWidget(self.filter_column)
+        self.filter_text=QLineEdit(); self.filter_text.setPlaceholderText('Contains (case-insensitive)'); filters.addWidget(self.filter_text)
+        self.sort_column=QComboBox(); self.sort_column.addItems(['Outlet','Report month']+list(FIELDS)); filters.addWidget(QLabel('Sort by:')); filters.addWidget(self.sort_column)
+        self.sort_order=QComboBox(); self.sort_order.addItems(['Ascending','Descending']); filters.addWidget(self.sort_order)
+        for widget in (self.filter_column,self.sort_column,self.sort_order): widget.currentIndexChanged.connect(self.render)
+        self.filter_text.textChanged.connect(self.render)
+        self.table=QTableWidget(); self.table.cellChanged.connect(self.edited); inventory_layout.addWidget(self.table); self.tabs.addTab(inventory_page,'Inventory (editable)')
+        self.results=QTableWidget(); self.results.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.recommendation_figure=Figure(figsize=(8,4),layout='constrained'); self.recommendation_canvas=FigureCanvasQTAgg(self.recommendation_figure)
+        recommendation_split=QSplitter(Qt.Vertical); recommendation_split.addWidget(self.recommendation_canvas); recommendation_split.addWidget(self.results); recommendation_split.setSizes([400,300]); self.tabs.addTab(recommendation_split,'Recommendations')
+        self.expiry=QTableWidget(); self.expiry.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.expiry_figure=Figure(figsize=(8,4),layout='constrained'); self.expiry_canvas=FigureCanvasQTAgg(self.expiry_figure)
+        expiry_split=QSplitter(Qt.Vertical); expiry_split.addWidget(self.expiry_canvas); expiry_split.addWidget(self.expiry); expiry_split.setSizes([400,300]); self.tabs.addTab(expiry_split,'Expiry queue')
         self.summary=QLabel('Import monthly CSV files to begin.'); self.summary.setWordWrap(True); layout.addWidget(self.summary)
         self.render()
     def import_csv(self):
@@ -55,8 +70,39 @@ class MainWindow(QMainWindow):
             groups={}
             for r in rows: groups.setdefault(r.item_id,[]).append(r)
             exact=Tree(list(groups.items())).find(query)
-            if exact is not None: return exact
-        return linear_search(rows,query)
+            rows=exact if exact is not None else linear_search(rows,query)
+        if not rows: return []
+        frame=pd.DataFrame([{'Outlet':r.location,'Report month':r.period, **{f:getattr(r,f) for f in FIELDS}, '_record':r} for r in rows])
+        term=self.filter_text.text().strip()
+        if term:
+            column=self.filter_column.currentText()
+            columns=list(frame.columns.drop('_record')) if column=='All columns' else [column]
+            mask=pd.Series(False,index=frame.index)
+            for col in columns: mask |= frame[col].astype(str).str.contains(term,case=False,regex=False,na=False)
+            frame=frame.loc[mask]
+        frame=frame.sort_values(self.sort_column.currentText(),ascending=self.sort_order.currentText()=='Ascending',kind='stable')
+        return frame['_record'].tolist()
+    def draw_recommendations(self, rows):
+        fig=self.recommendation_figure; fig.clear(); ax=fig.add_subplot(111)
+        if not rows: ax.text(.5,.5,'No recommendations to display',ha='center',va='center',transform=ax.transAxes); ax.set_axis_off()
+        else:
+            frame=pd.DataFrame(rows).head(20).iloc[::-1]
+            labels=[f"{r.location} · {r.item_id}" for r in frame.itertuples()]
+            positions=list(range(len(frame)))
+            ax.barh(positions,frame['need'],label='Indicative need',color='#dce5ec')
+            ax.barh(positions,frame['qty'],label='Allocated',color='#218a72')
+            ax.set_yticks(positions,labels); ax.set_xlabel('Units'); ax.set_title('Restocking need and allocated units (first 20 ranked products)'); ax.legend(loc='lower right')
+        self.recommendation_canvas.draw_idle()
+    def draw_expiry(self, rows):
+        fig=self.expiry_figure; fig.clear(); ax=fig.add_subplot(111)
+        if not rows: ax.text(.5,.5,'No batches to display',ha='center',va='center',transform=ax.transAxes); ax.set_axis_off()
+        else:
+            # Each point is a batch in an imported snapshot; historical snapshots are included.
+            frame=pd.DataFrame([{'remaining':r.remaining,'stock':r.current_total_stock} for r in rows])
+            buckets=pd.cut(frame['remaining'],[-float('inf'),-1,14,30,float('inf')],labels=['Expired','0–14 days','15–30 days','Over 30 days'])
+            totals=frame.groupby(buckets,observed=False)['stock'].sum().reindex(['Expired','0–14 days','15–30 days','Over 30 days'],fill_value=0)
+            ax.bar(totals.index,totals.values,color=['#c84949','#ef9857','#e8c35d','#3f9c83']); ax.set_ylabel('Units in snapshots'); ax.set_title('Batch expiry by report date — includes historical snapshots')
+        self.expiry_canvas.draw_idle()
     def set_table(self,table,headers,rows,editable=False):
         table.setRowCount(len(rows)); table.setColumnCount(len(headers)); table.setHorizontalHeaderLabels(headers)
         for i,row in enumerate(rows):
@@ -69,7 +115,9 @@ class MainWindow(QMainWindow):
         if not hasattr(self,'table'): return
         self.updating=True; self.visible=self.filtered()
         self.set_table(self.table,['Outlet','Report month']+list(FIELDS),[[r.location,r.period.strftime('%Y-%m')]+[getattr(r,f) for f in FIELDS] for r in self.visible],True)
-        self.set_table(self.expiry,['Outlet','Product','Batch','Remaining days','Batch stock'],[[r.location,r.item_name,r.batch_no,r.remaining,r.current_total_stock] for r in expiry_queue(self.visible)])
+        expiry_rows=expiry_queue(self.visible)
+        self.set_table(self.expiry,['Outlet','Report month','Product','Batch','Remaining days','Batch stock'],[[r.location,r.period.strftime('%Y-%m'),r.item_name,r.batch_no,r.remaining,r.current_total_stock] for r in expiry_rows])
+        self.draw_expiry(expiry_rows)
         self.updating=False; self.recalculate()
     def edited(self,row,col):
         if self.updating or col<2:return
@@ -98,11 +146,12 @@ class MainWindow(QMainWindow):
             rows=self.rows if self.location.currentText()=='All outlets' else [r for r in self.rows if r.location==self.location.currentText()]
             data=allocate(recommendations(rows),self.budget.value(),self.method.currentText()); self.all_results=data
             q=self.search.text().strip().casefold(); shown=[r for r in data if q in r['item_id'].casefold() or q in r['name'].casefold()]
+            self.draw_recommendations(shown)
             self.set_table(self.results,['Outlet','ID','Product','Report','Forecast/month','Stock','Expiring ≤14d','Need','Unit cost','Unit margin','Allocate','Spend'],[[r['location'],r['item_id'],r['name'],r['period'].strftime('%Y-%m'),f"{r['forecast']:.1f}",r['stock'],r['expiring'],r['need'],r['cost'],r['margin'],r['qty'],f"{r['qty']*r['cost']:.2f}"] for r in shown])
             spend=sum(r['qty']*r['cost'] for r in data)
             self.summary.setText(f"{len(rows)} batch records · {len(data)} outlet/products · Allocated: {spend:.2f} of {self.budget.value():.2f}. Search filters the display; allocation uses all products in the selected outlets. See README for assumptions.")
         except ValueError as e:
-            self.all_results=[]; self.results.setRowCount(0); self.summary.setText(str(e))
+            self.all_results=[]; self.results.setRowCount(0); self.draw_recommendations([]); self.summary.setText(str(e))
     def save_csv(self):
         if not self.files: return
         paths=list(self.files); labels=[Path(p).name for p in paths]
