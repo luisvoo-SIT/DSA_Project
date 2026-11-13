@@ -1,0 +1,8 @@
+item_id,item_name,category,unit_cost,unit_sell,current_total_stock,mth_purchase,lead_time,shelf_life,batch_no,supplier_rating
+ITM-001,Organic Whole Milk 1L,Dairy,2.20,3.50,20,110,7,45,0526,4.8
+ITM-002,Artisan Sourdough Loaf,Bakery,1.50,4.00,12,90,5,25,0526,4.5
+ITM-003,Cold Brew Coffee 250ml,Beverages,1.80,3.20,30,130,14,90,0426,4.2
+ITM-004,Greek Yogurt 500g,Dairy,2.50,4.20,18,65,7,30,0526,4.6
+ITM-006,Dark Chocolate Bar 85%,Snacks,1.20,2.50,40,100,14,180,0326,4.7
+ITM-009,Sparkling Mineral Water 750ml,Beverages,0.90,2.20,45,150,7,240,0426,4.9
+ITM-010,Roasted Cashew Nuts 200g,Snacks,3.00,5.50,25,60,10,180,0426,4.6

@@ -1,0 +1,10 @@
+item_id,item_name,category,unit_cost,unit_sell,current_total_stock,mth_purchase,lead_time,shelf_life,batch_no,supplier_rating
+ITM-001,Organic Whole Milk 1L,Dairy,2.20,3.50,10,95,7,45,0526,4.8
+ITM-001,Organic Whole Milk 1L,Dairy,2.20,3.50,5,95,7,45,0426,4.8
+ITM-002,Artisan Sourdough Loaf,Bakery,1.50,4.00,8,140,5,25,0526,4.5
+ITM-003,Cold Brew Coffee 250ml,Beverages,1.80,3.20,25,115,14,90,0426,4.2
+ITM-004,Greek Yogurt 500g,Dairy,2.50,4.20,15,75,7,30,0526,4.6
+ITM-005,Gluten-Free Granola 350g,Pantry,3.40,6.00,22,50,10,120,0426,4.0
+ITM-006,Dark Chocolate Bar 85%,Snacks,1.20,2.50,35,125,14,180,0326,4.7
+ITM-007,Cold Pressed Orange Juice,Beverages,2.00,3.80,8,85,5,28,0526,4.4
+ITM-008,Almond Butter 250g,Pantry,4.50,7.50,12,40,12,150,0426,4.3
