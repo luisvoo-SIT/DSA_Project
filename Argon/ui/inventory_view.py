@@ -7,8 +7,9 @@ from PySide6.QtWidgets import (
     QTableView, QHeaderView, QMessageBox, QFrame
 )
 import pandas as pd
-from typing import List, Optional
+from typing import Dict, List, Optional
 from core.models import BatchRecord, parse_batch_dates
+from core.bst import AVLTree
 
 
 class BatchTableModel(QAbstractTableModel):
