@@ -1,0 +1,101 @@
+item_id,item_name,category,unit_cost,unit_sell,current_total_stock,mth_purchase,lead_time,shelf_life,batch_no,supplier_rating
+ITM-101,White Monster Energy 500ml,Beverages,2.17,2.80,54,84,19,116,0426,4.0
+ITM-102,Sparkling Mineral Water 500ml,Beverages,2.39,3.55,65,57,14,193,0426,4.5
+ITM-103,Jasmine Green Tea 450ml,Beverages,2.48,3.90,212,155,16,162,0626,4.4
+ITM-104,Lemon Iced Tea 500ml,Beverages,3.13,4.65,124,101,19,288,0626,4.7
+ITM-105,Ginger Beer 330ml,Beverages,1.85,3.05,196,165,17,236,0426,3.5
+ITM-106,Coconut Water 330ml,Beverages,2.52,3.60,81,122,15,348,0526,4.4
+ITM-107,Oat Latte 250ml,Beverages,2.75,3.65,56,129,16,319,0426,3.8
+ITM-108,Apple Juice 1L,Beverages,2.98,4.55,20,58,8,235,0626,4.5
+ITM-109,Root Beer 330ml,Beverages,2.35,3.60,105,108,5,344,0626,4.0
+ITM-110,Mango Nectar 1L,Beverages,3.14,4.90,86,69,14,140,0626,4.7
+ITM-111,Low Fat Milk 1L,Dairy,1.64,2.35,92,112,2,59,0626,4.5
+ITM-112,Chocolate Milk 500ml,Dairy,3.95,5.30,42,36,2,53,0626,4.3
+ITM-113,Vanilla Yogurt 150g,Dairy,3.20,5.10,96,122,5,45,0626,4.5
+ITM-114,Strawberry Kefir 250ml,Dairy,3.72,5.15,2,29,5,45,0626,4.9
+ITM-115,Salted Butter 200g,Dairy,2.89,3.95,68,48,3,61,0626,4.7
+ITM-116,Cheddar Slices 200g,Dairy,3.31,4.45,25,195,4,41,0626,4.1
+ITM-117,Fresh Mozzarella 125g,Dairy,4.38,6.90,312,251,5,22,0626,4.9
+ITM-118,Cottage Cheese 200g,Dairy,3.18,5.00,0,18,6,39,0626,4.3
+ITM-119,Whipping Cream 250ml,Dairy,3.00,4.20,76,61,2,36,0626,4.7
+ITM-120,Cream Cheese 225g,Dairy,2.56,4.25,39,32,3,62,0626,4.1
+ITM-121,Wholemeal Sandwich Bread,Bakery,2.65,3.65,131,181,3,26,0626,4.0
+ITM-122,Brioche Burger Buns 4pk,Bakery,1.69,2.70,165,178,4,36,0626,4.4
+ITM-123,Plain Bagels 4pk,Bakery,1.42,2.35,3,65,2,32,0626,4.6
+ITM-124,Cinnamon Raisin Bread,Bakery,1.71,2.30,73,104,5,25,0626,4.4
+ITM-125,Butter Croissants 4pk,Bakery,2.33,3.30,31,26,6,26,0626,4.5
+ITM-126,Blueberry Muffins 4pk,Bakery,3.67,4.85,40,29,3,40,0626,4.5
+ITM-127,Garlic Flatbread 2pk,Bakery,1.62,2.25,75,119,4,18,0626,3.7
+ITM-128,Rye Crispbread 200g,Bakery,3.44,5.25,126,195,6,26,0626,3.9
+ITM-129,Mini Chocolate Rolls 6pk,Bakery,2.54,3.85,60,56,4,30,0626,3.6
+ITM-130,Soft Flour Tortillas 8pk,Bakery,2.12,2.95,92,81,2,22,0626,3.7
+ITM-131,Jasmine Rice 1kg,Pantry,2.02,3.20,44,112,5,680,0426,4.2
+ITM-132,Whole Wheat Spaghetti 500g,Pantry,4.11,6.60,160,169,10,436,0426,3.6
+ITM-133,Rolled Oats 500g,Pantry,2.40,3.80,9,35,8,683,0626,4.3
+ITM-134,Red Lentils 500g,Pantry,2.73,3.75,127,121,4,297,0626,3.6
+ITM-135,Canned Chickpeas 400g,Pantry,5.75,8.35,235,187,8,377,0626,4.6
+ITM-136,Tomato Passata 500g,Pantry,3.73,5.60,88,155,12,543,0626,3.7
+ITM-137,Coconut Milk 400ml,Pantry,3.87,6.30,129,157,19,470,0526,4.5
+ITM-138,Soy Sauce 300ml,Pantry,5.07,6.35,100,114,16,306,0426,4.8
+ITM-139,Smooth Peanut Butter 340g,Pantry,1.60,2.40,62,61,19,260,0526,4.7
+ITM-140,Extra Virgin Olive Oil 500ml,Pantry,3.07,4.65,80,73,15,679,0626,4.3
+ITM-141,Sea Salt Potato Chips 150g,Snacks,3.33,4.60,101,112,5,353,0626,4.3
+ITM-142,Honey Roasted Cashews 150g,Snacks,2.15,3.15,136,236,13,328,0526,4.0
+ITM-143,Pretzel Twists 200g,Snacks,1.71,2.25,91,90,8,133,0426,4.5
+ITM-144,Rice Crackers 120g,Snacks,1.99,2.80,38,166,12,319,0526,4.0
+ITM-145,Dried Mango 100g,Snacks,0.84,1.40,0,107,15,106,0626,3.6
+ITM-146,Milk Chocolate Wafer 45g,Snacks,3.18,4.50,34,47,4,261,0426,3.8
+ITM-147,Wasabi Peas 100g,Snacks,3.77,4.95,54,166,16,201,0526,4.4
+ITM-148,Caramel Popcorn 120g,Snacks,3.79,5.35,52,116,13,253,0526,4.0
+ITM-149,Trail Mix 200g,Snacks,2.94,4.45,32,75,6,251,0426,4.1
+ITM-150,Oat and Honey Bars 5pk,Snacks,2.62,3.60,250,188,18,294,0626,3.7
+ITM-151,Gala Apples 4pk,Produce,4.09,5.55,128,104,3,17,0626,3.6
+ITM-152,Navel Oranges 4pk,Produce,3.39,4.85,68,81,3,12,0626,4.8
+ITM-153,Cavendish Bananas 1kg,Produce,2.62,3.40,75,149,6,24,0626,4.2
+ITM-154,Baby Carrots 250g,Produce,1.05,1.50,65,168,5,22,0626,3.8
+ITM-155,Cherry Tomatoes 250g,Produce,3.66,4.65,127,229,5,27,0626,4.8
+ITM-156,English Cucumber,Produce,3.27,4.90,109,152,2,29,0626,3.8
+ITM-157,Green Seedless Grapes 500g,Produce,2.08,2.75,110,180,6,26,0626,4.3
+ITM-158,Baby Spinach 150g,Produce,1.25,1.90,127,122,6,20,0626,4.5
+ITM-159,Shiitake Mushrooms 200g,Produce,3.88,5.60,108,198,3,28,0626,4.1
+ITM-160,Fresh Blueberries 125g,Produce,3.00,3.85,7,25,4,10,0626,4.8
+ITM-161,Frozen Green Peas 500g,Frozen,2.25,3.60,148,134,17,525,0626,3.5
+ITM-162,Frozen Mixed Berries 500g,Frozen,5.52,7.75,49,106,9,343,0626,4.8
+ITM-163,Vanilla Ice Cream 1L,Frozen,4.04,6.30,205,283,18,503,0426,3.7
+ITM-164,Frozen Edamame 400g,Frozen,4.52,6.60,29,39,12,525,0526,3.6
+ITM-165,Pork Dumplings 400g,Frozen,4.18,5.65,55,89,7,323,0426,4.9
+ITM-166,Frozen Roti Prata 5pk,Frozen,3.18,5.15,17,24,18,277,0426,4.4
+ITM-167,Frozen Fish Fingers 400g,Frozen,3.32,5.50,129,133,6,227,0426,4.8
+ITM-168,Frozen Hash Browns 600g,Frozen,1.92,2.40,16,44,13,420,0626,4.4
+ITM-169,Frozen Margherita Pizza 350g,Frozen,2.75,3.70,255,219,17,303,0426,3.8
+ITM-170,Frozen Sweet Corn 500g,Frozen,2.64,3.45,24,25,12,407,0626,3.5
+ITM-171,Corn Flakes 375g,Breakfast,4.91,7.15,33,89,16,326,0626,3.8
+ITM-172,Honey Oat Cereal 400g,Breakfast,4.72,6.25,24,127,16,273,0626,4.3
+ITM-173,Chocolate Cereal 350g,Breakfast,4.68,6.35,136,197,17,290,0626,3.5
+ITM-174,Instant Plain Oatmeal 10pk,Breakfast,4.66,7.30,29,59,8,168,0626,3.7
+ITM-175,Pancake Mix 500g,Breakfast,3.20,4.75,156,132,12,276,0426,4.0
+ITM-176,Maple Syrup 250ml,Breakfast,4.79,7.35,168,137,12,320,0626,3.8
+ITM-177,Strawberry Jam 300g,Breakfast,4.06,5.95,25,64,15,324,0526,4.7
+ITM-178,Orange Marmalade 300g,Breakfast,3.44,4.40,249,179,17,465,0626,4.0
+ITM-179,Wildflower Honey 350g,Breakfast,4.00,5.35,181,171,19,325,0426,4.2
+ITM-180,Wheat Biscuits 430g,Breakfast,5.62,8.70,63,153,7,130,0526,4.3
+ITM-181,Mint Toothpaste 120g,Personal Care,5.82,9.55,7,33,12,419,0526,4.2
+ITM-182,Soft Toothbrush 2pk,Personal Care,2.77,3.65,51,50,10,802,0626,4.0
+ITM-183,Lavender Hand Wash 300ml,Personal Care,4.41,6.40,44,36,4,694,0626,4.5
+ITM-184,Aloe Body Wash 500ml,Personal Care,5.98,7.80,13,100,17,637,0426,4.9
+ITM-185,Daily Shampoo 400ml,Personal Care,5.75,7.35,225,168,15,832,0426,4.6
+ITM-186,Hair Conditioner 400ml,Personal Care,2.75,3.70,1,26,8,372,0626,3.9
+ITM-187,Unscented Bar Soap 3pk,Personal Care,4.30,6.40,89,63,8,558,0626,3.6
+ITM-188,Cotton Pads 80ct,Personal Care,1.50,2.00,6,37,15,817,0526,4.7
+ITM-189,Floss Picks 50ct,Personal Care,2.87,4.00,126,199,15,692,0626,3.9
+ITM-190,Hand Sanitizer 100ml,Personal Care,3.26,4.60,169,175,6,619,0626,3.5
+ITM-191,Lemon Dish Soap 500ml,Household,4.09,6.65,16,26,7,1069,0626,4.6
+ITM-192,Laundry Detergent 1L,Household,5.11,8.30,104,76,18,448,0626,4.4
+ITM-193,All-Purpose Cleaner 500ml,Household,3.88,5.75,42,179,10,673,0626,4.3
+ITM-194,Kitchen Sponges 4pk,Household,3.84,6.30,210,191,14,441,0426,3.9
+ITM-195,Facial Tissues 150ct,Household,1.40,2.00,113,114,16,646,0626,3.7
+ITM-196,Paper Towels 2pk,Household,5.41,8.50,104,78,17,810,0426,4.8
+ITM-197,Kitchen Trash Bags 20ct,Household,3.91,6.10,101,215,5,936,0626,4.0
+ITM-198,Baking Parchment 10m,Household,6.30,10.05,104,140,5,814,0526,4.7
+ITM-199,Aluminum Foil 10m,Household,1.59,2.55,118,129,11,635,0626,4.8
+ITM-200,Food Storage Bags 30ct,Household,4.74,7.75,203,184,14,575,0626,4.7
