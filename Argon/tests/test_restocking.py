@@ -62,15 +62,11 @@ class TestRestocking(unittest.TestCase):
 
         # Priority value:
         # Gross margin = 3.50 - 2.00 = 1.50 -> 150 cents
-        # Profit priority value = 150 cents
-        self.assertEqual(r.priority_value, 150)
+        # Priority value = 100 + 150 = 250 points
+        self.assertEqual(r.priority_value, 250)
 
-        # Value per cost = 150 / 2.00 = 75.0
-        self.assertAlmostEqual(r.value_per_cost, 75.0, places=4)
-
-        popular = calculate_restocking_recommendations(batches, objective="Popularity")[0]
-        self.assertEqual(popular.priority_value, 12000)
-        self.assertEqual(popular.need, r.need)
+        # Value per cost = 250 / 2.00 = 125.0
+        self.assertAlmostEqual(r.value_per_cost, 125.0, places=4)
 
 
 if __name__ == "__main__":

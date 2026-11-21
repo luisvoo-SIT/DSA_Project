@@ -16,13 +16,13 @@ For each product's latest snapshot at an outlet:
 
 ```text
 daily demand = forecast monthly sales / number of days in latest snapshot month
-target stock = daily demand × (lead time in days + 30)
+target stock = ceil(daily demand × (lead time in days + 30))
 raw need = max(0, target stock − usable stock)
-shelf-life cap = daily demand × shelf life in days
-restocking need = round(min(raw need, shelf-life cap))
+shelf-life cap = ceil(daily demand × shelf life in days)
+restocking need = min(raw need, shelf-life cap)
 ```
 
-Usable stock excludes batches with 14 days or less of remaining shelf life, including expired stock. The result is a non-negative whole number. Forecasting affects the quantity available for allocation in **both** modes, even when Profit is selected.
+Usable stock excludes batches with 14 days or less of remaining shelf life, including expired stock. The target stock and shelf-life cap are rounded up to whole units. The result is a non-negative whole number. Forecasting affects the quantity available for allocation in **both** modes, even when Profit is selected.
 
 ## 3. Score each unit
 
@@ -45,10 +45,10 @@ The profit score represents the gross margin in cents. The forecast-based need l
 
 ## 4. Allocate the budget
 
-The app ranks recommendations by **score per unit ÷ unit cost**, highest first, using stable merge sort. Items with zero cost and a positive score can be allocated up to their full need without spending budget.
+The app ranks recommendations by **score per unit ÷ unit cost**, highest first, using stable merge sort. The GPT importer requires a positive unit cost.
 
 - **Greedy** buys in ranked order, up to each product's need and the remaining budget. It is fast, but it may not achieve the highest possible total score.
-- **Bounded Knapsack** searches for the combination of whole units that maximizes total score without exceeding the budget or any product's need. It uses integer cents and is limited to budgets of $1,000 or less. The interface falls back to Greedy when a larger budget is selected.
+- **Bounded Knapsack** searches for the combination of whole units that maximizes total score without exceeding the budget or any product's need. It uses integer cents and is limited to budgets of $1,000 or less. For a larger budget, select Greedy; the interface displays an explanatory message.
 
 ## Example
 

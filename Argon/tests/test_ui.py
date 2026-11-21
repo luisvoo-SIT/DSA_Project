@@ -21,21 +21,6 @@ class TestUI(unittest.TestCase):
         self.assertEqual(self.window.tabs.tabText(1), "Batch Expiry Inspection")
         self.assertEqual(self.window.tabs.tabText(2), "Restocking Recommendations")
 
-    def test_objective_switch_reallocates_demo_data(self):
-        from core.csv_importer import import_monthly_csv
-        sample_dir = os.path.join(os.path.dirname(__file__), "..", "sample_data")
-        batches = []
-        for month in (9, 10, 11):
-            batches.extend(import_monthly_csv(os.path.join(sample_dir, f"Outlet_C_2026_{month:02}.csv"))[3])
-        view = self.window.recs_view
-        view.set_master_batches(batches)
-        profit = {r.item_id: r.allocated_units for r in view.all_recommendations}
-        view.objective_combo.setCurrentIndex(view.objective_combo.findData("Popularity"))
-        popularity = {r.item_id: r.allocated_units for r in view.all_recommendations}
-        self.assertNotEqual(profit, popularity)
-        self.assertTrue(all(r.objective == "Popularity" for r in view.all_recommendations))
-        self.assertLessEqual(sum(r.allocated_cost for r in view.all_recommendations), 500)
-
     def test_sample_files_import_into_ui(self):
         sample_dir = os.path.join(os.path.dirname(__file__), "..", "sample_data")
         files = [

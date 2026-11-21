@@ -27,7 +27,6 @@ class RecommendationTableModel(QAbstractTableModel):
         ("category", "Category"),
         ("unit_cost", "Unit Cost ($)"),
         ("unit_sell", "Unit Sell ($)"),
-        ("predicted_monthly_demand", "Forecast Monthly Sales"),
         ("daily_demand", "Daily Demand"),
         ("target_stock", "Target Stock"),
         ("usable_stock", "Usable Stock"),
@@ -72,7 +71,7 @@ class RecommendationTableModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.DisplayRole:
             if col_key in ("unit_cost", "unit_sell", "allocated_cost"):
                 return f"{float(val):.2f}"
-            elif col_key in ("predicted_monthly_demand", "daily_demand", "target_stock"):
+            elif col_key in ("daily_demand", "target_stock"):
                 return f"{float(val):.1f}"
             elif col_key in ("usable_stock", "expiring_stock"):
                 return f"{int(val)}" if float(val).is_integer() else f"{float(val):.1f}"
@@ -88,7 +87,7 @@ class RecommendationTableModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.TextAlignmentRole:
             if col_key in ("rank", "outlet", "item_id"):
                 return int(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-            elif col_key in ("unit_cost", "unit_sell", "predicted_monthly_demand", "daily_demand", "target_stock",
+            elif col_key in ("unit_cost", "unit_sell", "daily_demand", "target_stock",
                            "usable_stock", "expiring_stock", "need", "allocated_units",
                            "allocated_cost", "priority_value", "value_per_cost", "supplier_rating"):
                 return int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -142,13 +141,6 @@ class RecommendationsView(QWidget):
         self.budget_spin.setSingleStep(50.0)
         self.budget_spin.setPrefix("$ ")
         ctrl_layout.addWidget(self.budget_spin)
-
-        ctrl_layout.addWidget(QLabel("Restock objective:"))
-        self.objective_combo = QComboBox()
-        self.objective_combo.addItem("Profit", "Profit")
-        self.objective_combo.addItem("Popularity", "Popularity")
-        self.objective_combo.setToolTip("Profit: gross margin in cents per unit. Popularity: forecast monthly sales multiplied by 100 per unit.")
-        ctrl_layout.addWidget(self.objective_combo)
 
         # Allocation Method
         ctrl_layout.addWidget(QLabel("Method:"))
@@ -206,7 +198,6 @@ class RecommendationsView(QWidget):
         # Connect signals for immediate updates
         self.budget_spin.valueChanged.connect(self.recalculate_and_display)
         self.method_combo.currentIndexChanged.connect(self.recalculate_and_display)
-        self.objective_combo.currentIndexChanged.connect(self.recalculate_and_display)
         self.outlet_combo.currentIndexChanged.connect(self.recalculate_and_display)
         self.search_edit.textChanged.connect(self.filter_display_only)
 
@@ -252,8 +243,7 @@ class RecommendationsView(QWidget):
 
         # 2. Compute recommendations across selected outlets
         self.all_recommendations = calculate_restocking_recommendations(
-            self.master_batches, selected_outlets=selected_outlets,
-            objective=self.objective_combo.currentData(),
+            self.master_batches, selected_outlets=selected_outlets
         )
 
         # 3. Build Balanced BST (AVL Tree) for exact item_id lookup
@@ -328,7 +318,6 @@ class RecommendationsView(QWidget):
         total_prods = len(self.all_recommendations)
 
         self.metrics_label.setText(
-            f"<b>Objective:</b> {self.objective_combo.currentText()} &nbsp;&nbsp;|&nbsp;&nbsp; "
             f"<b>Budget:</b> ${total_budget:,.2f} &nbsp;&nbsp;|&nbsp;&nbsp; "
             f"<b>Allocated Spend:</b> ${total_spent:,.2f} &nbsp;&nbsp;|&nbsp;&nbsp; "
             f"<b>Remaining:</b> ${rem:,.2f} &nbsp;&nbsp;|&nbsp;&nbsp; "

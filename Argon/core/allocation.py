@@ -15,7 +15,7 @@ def allocate_greedy(recommendations: List[ProductRecommendation], budget: float)
     
     # Recommendations are expected to be ordered by rank (value-per-cost descending)
     for prod in recommendations:
-        if prod.need <= 0 or prod.priority_value <= 0:
+        if prod.need <= 0:
             prod.allocated_units = 0
             prod.allocated_cost = 0.0
             continue
@@ -72,7 +72,7 @@ def allocate_knapsack(recommendations: List[ProductRecommendation], budget: floa
     paid_items: List[Tuple[int, int, int, int]] = []  # (weight_cents, value, piece_size, prod_idx)
     
     for idx, prod in enumerate(recommendations):
-        if prod.need <= 0 or prod.priority_value <= 0:
+        if prod.need <= 0:
             continue
         if prod.unit_cost <= 0.0:
             prod.allocated_units = prod.need

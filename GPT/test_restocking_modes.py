@@ -1,0 +1,61 @@
+import os
+import unittest
+from dataclasses import replace
+from pathlib import Path
+
+os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+
+from inventory import allocate, load_csv, recommendations
+
+
+class RestockingModesTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sample = Path(__file__).parent / 'sample_data'
+        cls.records = []
+        for outlet in ('Outlet_C', 'Outlet_Youth', 'Outlet_Community'):
+            for month in (9, 10, 11):
+                rows = load_csv(sample / f'{outlet}_2026_{month:02}.csv')
+                assert len(rows) == (100 if outlet == 'Outlet_C' else 40)
+                cls.records.extend(rows)
+
+    def test_objectives_use_forecast_or_margin_and_change_allocations(self):
+        rows = [r for r in self.records if r.location == 'Outlet_Youth']
+        profit = recommendations(rows, 'Profit')
+        popularity = recommendations(rows, 'Popularity')
+        for item in profit:
+            self.assertEqual(item['value'], max(0, int(item['margin'] * 100)))
+        for item in popularity:
+            self.assertAlmostEqual(item['value'] / 100, item['forecast'], places=2)
+        for method in ('Greedy', 'Knapsack'):
+            a = allocate(profit, 100, method)
+            b = allocate(popularity, 100, method)
+            self.assertNotEqual({r['item_id']: r['qty'] for r in a},
+                                {r['item_id']: r['qty'] for r in b})
+            for allocation in (a, b):
+                self.assertLessEqual(sum(r['qty'] * r['cost'] for r in allocation), 100)
+                self.assertTrue(all(0 <= r['qty'] <= r['need'] for r in allocation))
+
+    def test_zero_profit_is_not_allocated(self):
+        row = self.records[0]
+        row = replace(row, unit_sell=row.unit_cost, mth_purchase=100, current_total_stock=0)
+        for method in ('Greedy', 'Knapsack'):
+            self.assertEqual(allocate(recommendations([row], 'Profit'), 100, method)[0]['qty'], 0)
+
+    def test_ui_switch_recalculates(self):
+        from PySide6.QtWidgets import QApplication
+        from app import MainWindow
+        app = QApplication.instance() or QApplication([])
+        window = MainWindow()
+        window.rows = [r for r in self.records if r.location == 'Outlet_Youth']
+        window.recalculate()
+        before = {r['item_id']: r['qty'] for r in window.all_results}
+        window.objective.setCurrentText('Popularity')
+        after = {r['item_id']: r['qty'] for r in window.all_results}
+        self.assertNotEqual(before, after)
+        self.assertTrue(all(r['objective'] == 'Popularity' for r in window.all_results))
+        window.close()
+
+
+if __name__ == '__main__':
+    unittest.main()

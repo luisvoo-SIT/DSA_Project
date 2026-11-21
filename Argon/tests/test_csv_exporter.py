@@ -55,7 +55,7 @@ class TestCSVExporter(unittest.TestCase):
         with open(export_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
         self.assertEqual(len(lines), 2)  # Header + 1 record
-        self.assertIn("rank,objective,outlet,item_id", lines[0])
+        self.assertIn("rank,outlet,item_id", lines[0])
         self.assertIn("ITM-001", lines[1])
         self.assertIn("60.00", lines[1])
 

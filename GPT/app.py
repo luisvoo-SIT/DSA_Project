@@ -24,6 +24,7 @@ class MainWindow(QMainWindow):
         self.location=QComboBox(); self.location.addItem('All outlets'); self.location.currentTextChanged.connect(self.render); controls.addWidget(QLabel('Outlet:')); controls.addWidget(self.location)
         self.search=QLineEdit(); self.search.setPlaceholderText('Search product name or ID'); self.search.textChanged.connect(self.render); controls.addWidget(self.search)
         self.budget=QDoubleSpinBox(); self.budget.setRange(0,100000000); self.budget.setDecimals(2); self.budget.setValue(100); self.budget.valueChanged.connect(self.recalculate); controls.addWidget(QLabel('Budget:')); controls.addWidget(self.budget)
+        self.objective=QComboBox(); self.objective.addItems(['Profit','Popularity']); self.objective.setToolTip('Profit: gross margin in cents per unit. Popularity: forecast monthly sales multiplied by 100 per unit.'); self.objective.currentTextChanged.connect(self.recalculate); controls.addWidget(QLabel('Restock objective:')); controls.addWidget(self.objective)
         self.method=QComboBox(); self.method.addItems(['Greedy','Knapsack']); self.method.currentTextChanged.connect(self.recalculate); controls.addWidget(self.method)
         self.tabs=QTabWidget(); layout.addWidget(self.tabs)
         inventory_page=QWidget(); inventory_layout=QVBoxLayout(inventory_page)
@@ -144,12 +145,12 @@ class MainWindow(QMainWindow):
         try:
             # Search is a display filter; the shared budget is allocated across all selected outlets.
             rows=self.rows if self.location.currentText()=='All outlets' else [r for r in self.rows if r.location==self.location.currentText()]
-            data=allocate(recommendations(rows),self.budget.value(),self.method.currentText()); self.all_results=data
+            data=allocate(recommendations(rows,self.objective.currentText()),self.budget.value(),self.method.currentText()); self.all_results=data
             q=self.search.text().strip().casefold(); shown=[r for r in data if q in r['item_id'].casefold() or q in r['name'].casefold()]
             self.draw_recommendations(shown)
-            self.set_table(self.results,['Outlet','ID','Product','Report','Forecast/month','Stock','Expiring ≤14d','Need','Unit cost','Unit margin','Allocate','Spend'],[[r['location'],r['item_id'],r['name'],r['period'].strftime('%Y-%m'),f"{r['forecast']:.1f}",r['stock'],r['expiring'],r['need'],r['cost'],r['margin'],r['qty'],f"{r['qty']*r['cost']:.2f}"] for r in shown])
+            self.set_table(self.results,['Outlet','ID','Product','Report','Forecast/month','Stock','Expiring ≤14d','Need','Unit cost','Unit margin','Priority score','Allocate','Spend'],[[r['location'],r['item_id'],r['name'],r['period'].strftime('%Y-%m'),f"{r['forecast']:.1f}",r['stock'],r['expiring'],r['need'],r['cost'],r['margin'],r['value'],r['qty'],f"{r['qty']*r['cost']:.2f}"] for r in shown])
             spend=sum(r['qty']*r['cost'] for r in data)
-            self.summary.setText(f"{len(rows)} batch records · {len(data)} outlet/products · Allocated: {spend:.2f} of {self.budget.value():.2f}. Search filters the display; allocation uses all products in the selected outlets. See README for assumptions.")
+            self.summary.setText(f"Objective: {self.objective.currentText()} · {len(rows)} batch records · {len(data)} outlet/products · Allocated: {spend:.2f} of {self.budget.value():.2f}. Search filters the display; allocation uses all products in the selected outlets. See README for assumptions.")
         except ValueError as e:
             self.all_results=[]; self.results.setRowCount(0); self.draw_recommendations([]); self.summary.setText(str(e))
     def save_csv(self):
