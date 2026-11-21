@@ -136,12 +136,17 @@ def recommendations(records, objective='Profit'):
         result.append(dict(location=location,item_id=item,name=representative.item_name,period=latest,forecast=predicted,stock=stock,expiring=expiring,need=need,cost=representative.unit_cost,margin=margin,objective=objective,value=value,qty=0))
     return merge_sort(result,lambda r:(-r['value']/int(r['cost']*100),r['location'],r['item_id']))
 
-def allocate(items, budget, method):
+class AllocationCancelled(Exception):
+    """A newer UI request has replaced this calculation."""
+
+
+def allocate(items, budget, method, cancel=None):
     cents=int((Decimal(str(budget))*100).to_integral_value(rounding=ROUND_HALF_UP))
     if cents<0: raise ValueError('Budget must be non-negative')
     items=[dict(r,qty=0) for r in items]
     if method=='Greedy':
         for r in items:
+            if cancel and cancel(): raise AllocationCancelled()
             if r['value']<=0: continue
             price=int(r['cost']*100); r['qty']=min(r['need'],cents//price); cents-=r['qty']*price
         return items
@@ -149,12 +154,14 @@ def allocate(items, budget, method):
     # Bounded knapsack, binary-decomposed bundles; sparse Pareto frontier with immutable paths.
     states={0:(0,None)}
     for index,r in enumerate(items):
+        if cancel and cancel(): raise AllocationCancelled()
         if r['value']<=0: continue
         price=int(r['cost']*100); remaining=min(r['need'],cents//price); chunk=1
         while remaining:
             count=min(chunk,remaining); remaining-=count; chunk*=2; weight=price*count; val=r['value']*count
             new=dict(states)
-            for cost,(score,path) in states.items():
+            for state_index,(cost,(score,path)) in enumerate(states.items()):
+                if state_index % 2048 == 0 and cancel and cancel(): raise AllocationCancelled()
                 nc=cost+weight
                 if nc<=cents and (nc not in new or new[nc][0]<score+val): new[nc]=(score+val,(index,count,path))
             states={}; best=-1

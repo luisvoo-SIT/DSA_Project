@@ -1,21 +1,45 @@
 """Market Expand desktop inventory application."""
 import csv
 import sys
+import threading
 import pandas as pd
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from pathlib import Path
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QObject, QRunnable, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (QApplication,QComboBox,QDoubleSpinBox,QFileDialog,QHBoxLayout,QHeaderView,
     QLabel,QLineEdit,QMainWindow,QMessageBox,QPushButton,QTableWidget,QTableWidgetItem,QTabWidget,
     QVBoxLayout,QWidget,QSplitter)
 from inventory import FIELDS, Tree, allocate, expiry_queue, linear_search, load_csv, recommendations
 
+class AllocationSignals(QObject):
+    finished = Signal(int, object, object)
+
+
+class AllocationTask(QRunnable):
+    def __init__(self, generation, rows, budget, method, objective):
+        super().__init__()
+        self.generation, self.rows, self.budget = generation, rows, budget
+        self.method, self.objective = method, objective
+        self.cancelled = threading.Event()
+        self.signals = AllocationSignals()
+
+    def run(self):
+        try:
+            result = allocate(recommendations(self.rows, self.objective), self.budget, self.method, cancel=self.cancelled.is_set)
+            self.signals.finished.emit(self.generation, result, None)
+        except Exception as exc:
+            self.signals.finished.emit(self.generation, None, str(exc))
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__(); self.setWindowTitle('Market Expand — Inventory & Restocking'); self.resize(1400,850)
         self.files={}; self.rows=[]; self.updating=False; self.outlet='All outlets'
+        self.all_results=[]; self._generation=0; self._allocation_task=None
+        self._allocation_timer=QTimer(self); self._allocation_timer.setSingleShot(True); self._allocation_timer.setInterval(250)
+        self._allocation_timer.timeout.connect(self._start_allocation)
         toolbar=self.addToolBar('Data')
         for label,fn in [('Import monthly CSV',self.import_csv),('Save edited CSV',self.save_csv),('Export recommendations',self.export),('Open flowchart',self.open_flowchart)]:
             action=QAction(label,self); action.triggered.connect(fn); toolbar.addAction(action)
@@ -142,15 +166,45 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self,'Invalid edit',str(e)); self.render()
     def recalculate(self,*_):
         if not hasattr(self,'results'):return
+        # Coalesce edits, and invalidate both pending results and exports immediately.
+        self._generation += 1
+        if self._allocation_task is not None: self._allocation_task.cancelled.set()
+        had_results = bool(self.all_results)
+        self.all_results=[]
+        self.results.setRowCount(0)
+        if had_results: self.draw_recommendations([])
+        if not self.rows:
+            self._allocation_timer.stop()
+            self.draw_recommendations([])
+            self.summary.setText('Import monthly CSV files to begin.')
+            return
+        self.summary.setText('Calculating recommendations…')
+        self._allocation_timer.start()
+
+    def _start_allocation(self):
+        # Keep at most one worker running. A newer request starts when it finishes.
+        if self._allocation_task is not None:return
+        rows=self.rows if self.location.currentText()=='All outlets' else [r for r in self.rows if r.location==self.location.currentText()]
+        task=AllocationTask(self._generation, list(rows), self.budget.value(), self.method.currentText(), self.objective.currentText())
+        self._allocation_task=task
+        task.signals.finished.connect(self._allocation_finished)
+        QThreadPool.globalInstance().start(task)
+
+    def _allocation_finished(self, generation, data, error):
+        self._allocation_task=None
+        if generation != self._generation:
+            if self.rows and not self._allocation_timer.isActive(): self._allocation_timer.start()
+            return
+        if error is not None:
+            self.all_results=[]; self.results.setRowCount(0); self.draw_recommendations([]); self.summary.setText(error)
+            return
         try:
-            # Search is a display filter; the shared budget is allocated across all selected outlets.
-            rows=self.rows if self.location.currentText()=='All outlets' else [r for r in self.rows if r.location==self.location.currentText()]
-            data=allocate(recommendations(rows,self.objective.currentText()),self.budget.value(),self.method.currentText()); self.all_results=data
+            self.all_results=data
             q=self.search.text().strip().casefold(); shown=[r for r in data if q in r['item_id'].casefold() or q in r['name'].casefold()]
             self.draw_recommendations(shown)
             self.set_table(self.results,['Outlet','ID','Product','Report','Forecast/month','Stock','Expiring ≤14d','Need','Unit cost','Unit margin','Priority score','Allocate','Spend'],[[r['location'],r['item_id'],r['name'],r['period'].strftime('%Y-%m'),f"{r['forecast']:.1f}",r['stock'],r['expiring'],r['need'],r['cost'],r['margin'],r['value'],r['qty'],f"{r['qty']*r['cost']:.2f}"] for r in shown])
             spend=sum(r['qty']*r['cost'] for r in data)
-            self.summary.setText(f"Objective: {self.objective.currentText()} · {len(rows)} batch records · {len(data)} outlet/products · Allocated: {spend:.2f} of {self.budget.value():.2f}. Search filters the display; allocation uses all products in the selected outlets. See README for assumptions.")
+            self.summary.setText(f"Objective: {self.objective.currentText()} · {len(data)} outlet/products · Allocated: {spend:.2f} of {self.budget.value():.2f}. Search filters the display; allocation uses all products in the selected outlets. See README for assumptions.")
         except ValueError as e:
             self.all_results=[]; self.results.setRowCount(0); self.draw_recommendations([]); self.summary.setText(str(e))
     def save_csv(self):

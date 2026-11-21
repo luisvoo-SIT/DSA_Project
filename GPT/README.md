@@ -13,6 +13,8 @@ Choose **Import monthly CSV** and select one or more files. Try the three files 
 
 Pandas handles table filtering, sorting and graph aggregation. Matplotlib provides the embedded charts: pandas alone does not supply the interactive Qt chart canvas. Both dependencies are listed in `requirements.txt`.
 
+Recommendations recalculate in the background after a short pause in editing the budget. The summary shows when a calculation is running; exporting is available again when the latest result is ready. Large knapsack calculations can still take time, but the window remains interactive.
+
 ## CSV format
 
 The filename is `Outlet_Name_YYYY_MM.csv`, for example `Outlet_A_2026_06.csv`. The final year and month identify the reporting month and the preceding text identifies the outlet. A reporting snapshot is taken on the last day of the month. Required headers:
