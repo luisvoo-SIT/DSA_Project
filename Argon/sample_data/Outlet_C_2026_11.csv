@@ -1,0 +1,101 @@
+item_id,item_name,category,unit_cost,unit_sell,current_total_stock,mth_purchase,lead_time,shelf_life,batch_no,supplier_rating
+SKU001,White Monster Energy Ultra 500ml,Energy Drinks,4.66,6.91,37,112,1,365,0926,4.3
+SKU002,Monster Energy Original 500ml,Energy Drinks,1.92,2.72,65,70,7,365,1026,3.7
+SKU003,Red Bull Energy Drink 250ml,Energy Drinks,3.30,4.99,61,143,6,365,1026,4.5
+SKU004,Red Bull Sugarfree 250ml,Energy Drinks,7.80,10.06,31,110,6,365,0926,4.8
+SKU005,Pocari Sweat Ion Supply 500ml,Energy Drinks,3.78,5.68,17,100,4,365,1026,4.1
+SKU006,100Plus Original 500ml,Energy Drinks,4.25,6.55,34,79,6,365,0926,4.4
+SKU007,100Plus Zero 500ml,Energy Drinks,2.51,3.42,49,68,1,365,1026,4.8
+SKU008,Celsius Sparkling Orange 355ml,Energy Drinks,2.69,3.57,66,75,2,365,0926,4.6
+SKU009,Monster Mango Loco 500ml,Energy Drinks,3.94,6.03,45,38,6,365,0926,4.1
+SKU010,Rockstar Original 500ml,Energy Drinks,2.82,4.27,85,52,3,365,1026,3.6
+SKU011,Fresh Full Cream Milk 1L,Dairy,1.06,1.69,87,111,3,30,1026,4.7
+SKU012,Fresh Low Fat Milk 1L,Dairy,7.86,11.10,18,143,6,30,1026,3.9
+SKU013,Chocolate Milk 250ml,Dairy,2.34,3.86,53,143,6,30,0926,4.7
+SKU014,Strawberry Yogurt 150g,Dairy,3.32,4.66,48,43,4,30,0926,4.5
+SKU015,Greek Yogurt Plain 150g,Dairy,5.13,8.60,83,52,5,30,0926,3.5
+SKU016,Cheddar Cheese Slices 200g,Dairy,1.04,1.33,93,72,3,30,0926,4.5
+SKU017,Salted Butter 200g,Dairy,3.15,3.99,35,123,2,30,1026,4.2
+SKU018,Mozzarella Cheese 200g,Dairy,2.72,4.02,12,82,7,30,0926,4.9
+SKU019,Vanilla Yogurt 150g,Dairy,7.32,10.33,12,83,5,30,0926,5.0
+SKU020,Soy Milk Unsweetened 1L,Dairy,3.03,3.83,99,143,1,30,1026,4.1
+SKU021,Bananas 1kg,Fruit,1.41,1.83,42,90,3,18,1026,3.7
+SKU022,Apples Fuji 4 pack,Fruit,7.80,11.94,70,122,3,18,1026,4.5
+SKU023,Oranges 4 pack,Fruit,2.11,3.43,99,140,4,18,1026,3.6
+SKU024,Blueberries 125g,Fruit,6.68,8.79,1,85,4,18,0926,4.1
+SKU025,Strawberries 250g,Fruit,1.37,2.28,41,16,3,18,1026,4.9
+SKU026,Seedless Grapes 500g,Fruit,1.21,1.82,59,13,6,18,1026,4.0
+SKU027,Mangoes 2 pack,Fruit,2.83,4.69,48,70,1,18,0926,4.9
+SKU028,Pears 4 pack,Fruit,3.39,4.48,22,154,3,18,1026,5.0
+SKU029,Watermelon Cut 500g,Fruit,5.45,7.46,92,117,1,18,1026,4.4
+SKU030,Pineapple Cut 300g,Fruit,4.53,7.30,37,19,7,18,0926,4.5
+SKU031,Baby Spinach 200g,Vegetables,6.82,9.89,83,147,7,20,0926,4.4
+SKU032,Broccoli 1 head,Vegetables,4.59,6.64,7,141,2,20,1026,4.6
+SKU033,Carrots 500g,Vegetables,1.63,2.06,100,130,5,20,1026,4.4
+SKU034,Cherry Tomatoes 250g,Vegetables,2.02,2.90,30,30,2,20,0926,4.9
+SKU035,Cucumber 1 piece,Vegetables,1.38,1.99,64,112,3,20,1026,4.4
+SKU036,Iceberg Lettuce 1 head,Vegetables,5.12,6.41,13,125,1,20,0926,3.5
+SKU037,Potatoes 1kg,Vegetables,1.62,2.56,68,95,5,20,0926,4.4
+SKU038,Yellow Onions 1kg,Vegetables,1.42,2.38,15,41,1,20,1026,4.2
+SKU039,Mushrooms 200g,Vegetables,3.44,5.22,85,147,7,20,0926,5.0
+SKU040,Bell Peppers 3 pack,Vegetables,0.98,1.47,88,94,2,20,1026,4.3
+SKU041,Wholemeal Bread 400g,Bakery,2.33,3.33,24,42,5,12,0926,4.3
+SKU042,White Bread 400g,Bakery,7.87,11.14,13,116,5,12,0926,3.9
+SKU043,Butter Croissant 2 pack,Bakery,6.11,7.81,31,139,1,12,1026,4.2
+SKU044,Blueberry Muffin 2 pack,Bakery,5.45,7.61,40,126,3,12,0926,4.8
+SKU045,Chocolate Donut 2 pack,Bakery,6.87,8.80,72,57,2,12,1026,4.5
+SKU046,Plain Bagels 4 pack,Bakery,0.94,1.46,33,102,1,12,0926,4.3
+SKU047,Garlic Bread 200g,Bakery,3.82,4.88,3,122,1,12,1026,4.3
+SKU048,Sourdough Loaf 400g,Bakery,5.60,8.62,70,61,6,12,1026,3.8
+SKU049,Hot Dog Buns 6 pack,Bakery,7.21,10.53,44,103,4,12,0926,4.9
+SKU050,Hamburger Buns 4 pack,Bakery,7.48,9.84,94,27,2,12,0926,4.4
+SKU051,Chicken Sandwich,Chilled Meals,4.10,6.30,97,35,7,10,0926,4.5
+SKU052,Tuna Sandwich,Chilled Meals,4.96,8.39,43,96,1,10,0926,4.5
+SKU053,Egg Mayo Sandwich,Chilled Meals,3.63,5.01,59,136,3,10,1026,3.6
+SKU054,Chicken Caesar Salad,Chilled Meals,7.44,10.19,19,146,4,10,0926,3.8
+SKU055,Pasta Salad,Chilled Meals,4.81,7.69,86,144,5,10,0926,4.5
+SKU056,Chicken Rice Bowl,Chilled Meals,1.18,1.57,39,100,3,10,0926,3.5
+SKU057,Vegetable Wrap,Chilled Meals,0.94,1.36,48,150,6,10,1026,3.9
+SKU058,Salmon Onigiri,Chilled Meals,1.40,2.14,100,141,5,10,1026,4.4
+SKU059,Chicken Onigiri,Chilled Meals,7.35,10.35,76,124,6,10,1026,4.2
+SKU060,Hummus and Crackers,Chilled Meals,5.78,8.02,77,33,3,10,1026,4.3
+SKU061,Frozen Mixed Vegetables 500g,Frozen Foods,3.31,4.42,1,135,6,270,1026,3.6
+SKU062,Frozen Green Peas 500g,Frozen Foods,4.26,6.71,95,92,1,270,0926,4.1
+SKU063,Frozen Chicken Nuggets 500g,Frozen Foods,5.21,8.11,58,80,5,270,0926,4.2
+SKU064,Frozen French Fries 500g,Frozen Foods,5.93,8.70,45,96,2,270,1026,3.7
+SKU065,Frozen Margherita Pizza,Frozen Foods,5.62,8.12,6,145,5,270,1026,4.0
+SKU066,Frozen Dumplings 400g,Frozen Foods,2.60,4.11,77,36,7,270,1026,4.8
+SKU067,Vanilla Ice Cream 1L,Frozen Foods,6.25,9.90,84,45,2,270,0926,3.8
+SKU068,Chocolate Ice Cream 1L,Frozen Foods,1.06,1.60,78,31,3,270,0926,4.3
+SKU069,Frozen Fish Fillets 400g,Frozen Foods,1.42,1.82,63,146,6,270,1026,4.7
+SKU070,Frozen Berries 500g,Frozen Foods,7.75,10.72,87,16,3,270,1026,3.6
+SKU071,Potato Chips Original 150g,Snacks,7.43,10.55,49,160,7,180,1026,3.9
+SKU072,Potato Chips Sour Cream 150g,Snacks,2.68,3.36,42,130,6,180,0926,4.5
+SKU073,Salted Pretzels 150g,Snacks,2.50,3.72,17,56,7,180,0926,4.8
+SKU074,Roasted Almonds 100g,Snacks,5.95,9.93,43,140,4,180,1026,4.2
+SKU075,Cashew Nuts 100g,Snacks,7.25,10.33,6,11,4,180,0926,3.8
+SKU076,Chocolate Cookies 150g,Snacks,1.30,2.01,24,119,4,180,1026,4.5
+SKU077,Oat Biscuits 200g,Snacks,1.44,2.44,37,118,5,180,1026,4.7
+SKU078,Granola Bar Honey,Snacks,2.57,3.73,32,35,2,180,1026,4.6
+SKU079,Dark Chocolate 100g,Snacks,1.32,2.12,46,106,3,180,0926,4.5
+SKU080,Milk Chocolate 100g,Snacks,5.18,7.60,67,49,6,180,0926,4.8
+SKU081,Mineral Water 600ml,Beverages,3.23,4.59,41,29,4,270,1026,4.2
+SKU082,Sparkling Water 500ml,Beverages,1.45,2.21,88,109,3,270,1026,3.9
+SKU083,Orange Juice 1L,Beverages,4.35,7.31,75,34,3,270,1026,4.0
+SKU084,Apple Juice 1L,Beverages,4.36,5.66,38,23,2,270,0926,4.3
+SKU085,Green Tea 500ml,Beverages,4.83,7.07,74,86,7,270,1026,3.9
+SKU086,Black Coffee 240ml,Beverages,4.87,7.35,5,147,6,270,1026,4.5
+SKU087,Iced Lemon Tea 500ml,Beverages,1.83,2.33,5,153,4,270,1026,3.8
+SKU088,Cola Original 330ml,Beverages,5.24,7.62,35,160,4,270,1026,3.8
+SKU089,Cola Zero 330ml,Beverages,1.52,2.25,78,106,3,270,0926,4.7
+SKU090,Coconut Water 330ml,Beverages,7.34,11.28,63,142,5,270,1026,3.7
+SKU091,Jasmine Rice 1kg,Pantry,3.50,4.45,45,29,6,365,0926,4.9
+SKU092,Spaghetti 500g,Pantry,7.45,9.69,53,157,5,365,0926,4.5
+SKU093,Instant Noodles Chicken 5 pack,Pantry,3.70,5.51,92,76,2,365,0926,4.8
+SKU094,Rolled Oats 500g,Pantry,2.93,4.46,11,85,7,365,1026,4.2
+SKU095,Peanut Butter 340g,Pantry,1.51,2.29,48,16,2,365,0926,3.9
+SKU096,Strawberry Jam 250g,Pantry,3.47,5.77,0,79,3,365,0926,3.8
+SKU097,Canned Tuna 185g,Pantry,1.54,1.98,67,62,2,365,1026,4.3
+SKU098,Baked Beans 420g,Pantry,2.15,3.19,81,74,2,365,1026,4.3
+SKU099,Tomato Pasta Sauce 500g,Pantry,1.88,3.00,30,99,6,365,1026,4.4
+SKU100,Olive Oil 500ml,Pantry,2.63,4.45,77,14,2,365,1026,3.7

@@ -11,7 +11,8 @@ from core.sorting import merge_sort
 
 def calculate_restocking_recommendations(
     all_batches: List[BatchRecord],
-    selected_outlets: Optional[List[str]] = None
+    selected_outlets: Optional[List[str]] = None,
+    objective: str = "Profit",
 ) -> List[ProductRecommendation]:
     """
     Computes restocking recommendations across the selected outlets.
@@ -32,10 +33,14 @@ def calculate_restocking_recommendations(
        - need_units = int(round(capped_need)).
        - Gross margin = max(0.0, unit_sell - unit_cost).
        - margin_cents = int(round(gross_margin * 100)).
-       - priority_value = 100 + margin_cents.
+       - Profit score = non-negative gross margin in cents per unit.
+       - Popularity score = forecast monthly demand multiplied by 100 per unit.
        - value_per_cost = priority_value / unit_cost if unit_cost > 0 else float('inf').
     4. Rank products across all selected outlets using merge sort by value_per_cost descending.
     """
+    if objective not in ("Profit", "Popularity"):
+        raise ValueError(f"Unknown restocking objective: {objective}")
+
     if selected_outlets is not None:
         selected_set = set(selected_outlets)
         batches = [b for b in all_batches if b.outlet in selected_set]
@@ -111,10 +116,12 @@ def calculate_restocking_recommendations(
         capped_need = min(raw_need, max_order)
         need_units = int(round(capped_need))
 
-        # Priority value calculation
+        # Objective value calculation
         gross_margin = max(0.0, unit_sell - unit_cost)
         margin_cents = int(round(gross_margin * 100))
-        priority_value = 100 + margin_cents
+        # Integer scores keep the bounded-knapsack objective exact. Popularity
+        # is forecast units scaled by 100 to retain two decimal places.
+        priority_value = margin_cents if objective == "Profit" else int(round(predicted_monthly * 100))
 
         if unit_cost > 0:
             value_per_cost = priority_value / unit_cost
@@ -137,6 +144,7 @@ def calculate_restocking_recommendations(
             priority_value=priority_value,
             value_per_cost=value_per_cost,
             supplier_rating=supplier_rating,
+            objective=objective,
         )
         recommendations.append(rec)
 
