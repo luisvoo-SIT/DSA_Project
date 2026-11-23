@@ -37,6 +37,7 @@ def export_recommendations_csv(filepath: str, recommendations: List[ProductRecom
     """
     headers = [
         "rank",
+        "objective",
         "outlet",
         "item_id",
         "item_name",
@@ -62,6 +63,7 @@ def export_recommendations_csv(filepath: str, recommendations: List[ProductRecom
         for r in recommendations:
             row = {
                 "rank": r.rank,
+                "objective": r.objective,
                 "outlet": r.outlet,
                 "item_id": r.item_id,
                 "item_name": r.item_name,

@@ -369,13 +369,13 @@ class ProcessDiagramWindow(QWidget):
         # Step 4: Illustrative Priority Value & Score
         gross_margin = max(0.0, sell - cost)
         margin_cents = int(round(gross_margin * 100))
-        availability_score = 100
-        priority_value = availability_score + margin_cents
+        priority_value = margin_cents
+        popularity_value = int(round(forecast_monthly * 100))
         val_per_cost = priority_value / cost if cost > 0 else float('inf')
 
         # Step 5: Restocking Simulation
         can_afford = int(math.floor(budget / cost)) if cost > 0 else need_units
-        allocated_units = min(need_units, can_afford)
+        allocated_units = min(need_units, can_afford) if priority_value > 0 else 0
         allocated_cost = allocated_units * cost
         rem_budget = budget - allocated_cost
 
@@ -401,14 +401,14 @@ LIVE DECISION MODEL STEP-BY-STEP BREAKDOWN
    Forecast Sales over Shelf Life: {daily_demand:.3f} * {shelf} = {shelf_life_cap:.2f} units
    Order Need (units): min({raw_need:.2f}, {shelf_life_cap:.2f}) -> {need_units} discrete units
 
-4. HEURISTIC PRIORITY SCORING:
-   Base Availability Value: 100 points
+4. PRIORITY SCORING:
    Gross Margin: ${sell:.2f} - ${cost:.2f} = ${gross_margin:.2f} ({margin_cents} cents)
-   Total Priority Score: 100 + {margin_cents} = {priority_value} points/unit
+   Profit score: {priority_value} points/unit (margin in cents)
+   Popularity score: {forecast_monthly:.2f} x 100 = {popularity_value} points/unit
    Unit Cost: ${cost:.2f}
-   -> Value-per-Cost Ratio: {priority_value} / {cost:.2f} = {val_per_cost:.2f} pts/$
+   -> Profit score per dollar: {priority_value} / {cost:.2f} = {val_per_cost:.2f} pts/$
 
-5. BUDGET ALLOCATION SIMULATION ({method}):
+5. PROFIT MODE, SINGLE-PRODUCT SIMULATION ({method}):
    Available Restocking Budget: ${budget:.2f}
    Discrete Need: {need_units} units @ ${cost:.2f}
    Max Affordable Quantity: floor(${budget:.2f} / ${cost:.2f}) = {can_afford} units

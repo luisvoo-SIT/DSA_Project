@@ -112,3 +112,4 @@ class ProductRecommendation:
     allocated_units: int = 0
     allocated_cost: float = 0.0
     supplier_rating: float = 0.0
+    objective: str = "Profit"

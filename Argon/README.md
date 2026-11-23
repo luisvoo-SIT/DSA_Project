@@ -20,7 +20,8 @@ A PySide6 desktop prototype for viewing monthly outlet inventory, inspecting bat
   - Calendar month index **Linear Regression** for products with $\ge 2$ historical months; single-month purchase pass-through for 1 month; clamped at $\ge 0$.
   - Target stock covering supplier lead time plus 30 days. Expiring stock ($\le 14$ days remaining) is strictly excluded from usable inventory.
   - Restocking need capped at forecast sales over the product's shelf life.
-  - Illustrative additive priority value per unit: 100 points for availability plus 1 point per cent of non-negative gross margin.
+  - Choose a restocking objective: **Profit** scores each unit by non-negative gross margin in cents; **Popularity** scores each unit by its outlet's forecast monthly sales multiplied by 100 (rounded to an integer). A score of zero receives no allocation.
+  - Both objectives use the forecast-based need cap, usable stock, lead time and shelf life. Scores are per outlet and are calculated from imported history; they are not stored in input CSVs. Popularity is a priority score, not predicted sales of the allocated units, and may concentrate spending on a few products. Profit assumes units sell at the stated price and excludes operating costs and waste.
   - Explicit **Merge Sort** ranking items by value per cost.
   - Shared budget allocation across selected outlets:
     - **Greedy Allocation**: Buys in rank order up to the shared budget limit.
@@ -75,6 +76,8 @@ python3 app.py
 7. Switch to **Restocking Recommendations** to adjust the restocking budget, switch between Greedy and Knapsack allocation methods, filter outlets, or search for products.
 8. Click **Export recommendations CSV** to export the entire recommendation table.
 9. Click **Process Diagram** on the toolbar to explore the editable pipeline diagram and interactive live calculation illustration.
+
+To compare objectives, import `Outlet_C_2026_09.csv`, `Outlet_C_2026_10.csv`, and `Outlet_C_2026_11.csv` together, choose Outlet C and a $500 budget, then switch **Restock objective**. These files contain synthetic sales and stock figures for the same 100 products across three months, including White Monster Energy. The table displays the forecast, selected objective score, and allocation; the recommendation export records the objective. Higher popularity scores indicate higher forecast monthly demand, and scores are not comparable across objectives.
 
 ---
 
