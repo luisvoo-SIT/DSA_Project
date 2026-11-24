@@ -1,0 +1,2 @@
+item_id,item_name,category,unit_cost,unit_sell,current_total_stock,mth_purchase,lead_time,shelf_life,batch_no,supplier_rating,initial_stock_target
+GRAD001,Gradual restocking example,Target demonstration,2.00,3.50,8,24,0,20,1126,4.5,50

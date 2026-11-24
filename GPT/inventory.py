@@ -11,7 +11,8 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 
-FIELDS = ('item_id','item_name','category','unit_cost','unit_sell','current_total_stock','mth_purchase','lead_time','shelf_life','batch_no','supplier_rating')
+REQUIRED_FIELDS = ('item_id','item_name','category','unit_cost','unit_sell','current_total_stock','mth_purchase','lead_time','shelf_life','batch_no','supplier_rating')
+FIELDS = REQUIRED_FIELDS + ('initial_stock_target', 'mth_expired')
 
 @dataclass(frozen=True)
 class Batch:
@@ -28,6 +29,8 @@ class Batch:
     shelf_life: int
     batch_no: str
     supplier_rating: float
+    initial_stock_target: int | None = None
+    mth_expired: int | None = None
 
     @property
     def delivery(self):
@@ -45,11 +48,11 @@ def load_csv(path, text=None):
     location, year, month = match.group(1), int(match.group(2)), int(match.group(3))
     if not 1 <= month <= 12 or year < 2000: raise ValueError('Invalid report year or month')
     period = date(year, month, calendar.monthrange(year, month)[1])
-    rows=[]; seen=set(); purchases={}
+    rows=[]; seen=set(); purchases={}; losses={}
     with (path.open(encoding='utf-8-sig', newline='') if text is None else io.StringIO(text, newline='')) as handle:
         reader=csv.DictReader(handle)
-        if not reader.fieldnames or any(f not in reader.fieldnames for f in FIELDS):
-            raise ValueError('Required CSV columns: '+', '.join(FIELDS))
+        if not reader.fieldnames or any(f not in reader.fieldnames for f in REQUIRED_FIELDS):
+            raise ValueError('Required CSV columns: '+', '.join(REQUIRED_FIELDS))
         for line, raw in enumerate(reader, 2):
             try:
                 values={f:(raw.get(f) or '').strip() for f in FIELDS}
@@ -63,13 +66,19 @@ def load_csv(path, text=None):
                 if cost.as_tuple().exponent < -2 or sell.as_tuple().exponent < -2: raise ValueError('prices must have at most two decimal places')
                 rating=float(values['supplier_rating'])
                 if not math.isfinite(rating) or not 0 <= rating <= 5: raise ValueError('supplier_rating must be between 0 and 5')
-                row=Batch(location,period,values['item_id'],values['item_name'],values['category'],cost,sell,*(int(values[f]) for f in ('current_total_stock','mth_purchase','lead_time','shelf_life')),values['batch_no'],rating)
+                raw_target=values['initial_stock_target']
+                if raw_target and not re.fullmatch(r'\d+',raw_target): raise ValueError('initial_stock_target must be blank or a non-negative integer')
+                raw_expired=values['mth_expired']
+                if raw_expired and not re.fullmatch(r'\d+',raw_expired): raise ValueError('mth_expired must be blank or a non-negative integer')
+                row=Batch(location,period,values['item_id'],values['item_name'],values['category'],cost,sell,*(int(values[f]) for f in ('current_total_stock','mth_purchase','lead_time','shelf_life')),values['batch_no'],rating,int(raw_target) if raw_target else None,int(raw_expired) if raw_expired else None)
                 if row.delivery > period: raise ValueError('assumed batch delivery is after report date')
                 key=(row.item_id,row.batch_no)
                 if key in seen: raise ValueError('duplicate product and batch')
                 seen.add(key)
                 if row.item_id in purchases and purchases[row.item_id] != row.mth_purchase: raise ValueError('mth_purchase differs across batches of the same product')
                 purchases[row.item_id]=row.mth_purchase; rows.append(row)
+                if row.item_id in losses and losses[row.item_id] != row.mth_expired: raise ValueError('mth_expired differs across batches of the same product')
+                losses[row.item_id]=row.mth_expired
             except (ValueError, InvalidOperation, OverflowError) as exc: raise ValueError(f'Line {line}: {exc}') from exc
     if not rows: raise ValueError('CSV contains no product rows')
     return rows
@@ -112,29 +121,74 @@ def forecast(observations):
     slope=sum((x-xmean)*(y-ymean) for x,y in zip(xs,ys))/denom if denom else 0
     return max(0.0,ymean+slope*(xs[-1]+1-xmean))
 
-def recommendations(records, objective='Profit'):
-    if objective not in ('Profit', 'Popularity'):
+EXPIRED_REPLACEMENT_PERCENT = 75
+OBJECTIVES = ('Availability + margin', 'Popularity', 'Profit')
+
+
+def monthly_expired_units(current):
+    """Actual monthly losses when supplied; otherwise an estimate from dates.
+
+    Retained expired stock from earlier months is not a new monthly loss.
+    Explicit mth_expired counts once per product, never once per batch.
+    """
+    values = {r.mth_expired for r in current if r.mth_expired is not None}
+    if len(values) > 1:
+        raise ValueError('Conflicting mth_expired for the same product/month')
+    if values:
+        return next(iter(values)), 'Reported monthly losses'
+    month_start = current[0].period.replace(day=1)
+    units = sum(r.current_total_stock for r in current
+                if month_start <= r.delivery + timedelta(days=r.shelf_life) <= r.period)
+    return units, 'Estimated from current-month expiry dates'
+
+
+def recommendations(records, objective=OBJECTIVES[0]):
+    if objective not in OBJECTIVES:
         raise ValueError(f'Unknown restocking objective: {objective}')
-    by=defaultdict(list)
-    for r in records: by[(r.location,r.item_id)].append(r)
-    result=[]
-    for (location,item), rows in by.items():
-        latest=max(r.period for r in rows); current=[r for r in rows if r.period==latest]
-        history={r.period:r.mth_purchase for r in rows}
-        predicted=forecast(history); representative=current[0]
-        stock=sum(r.current_total_stock for r in current)
-        expiring=sum(r.current_total_stock for r in current if r.remaining<=14)
-        usable=stock-expiring
-        days=calendar.monthrange(latest.year,latest.month)[1]
-        target=math.ceil(predicted/days*(representative.lead_time+30))
-        # Limit the proposed order to expected sales during its shelf life.
-        shelf_cap=math.ceil(predicted/days*representative.shelf_life)
-        need=max(0,min(target-usable,shelf_cap))
-        margin=representative.unit_sell-representative.unit_cost
-        # Integer score per unit: gross margin cents or forecast sales x 100.
-        value=max(0,int((margin*100).to_integral_value(rounding=ROUND_HALF_UP))) if objective=='Profit' else int((Decimal(str(predicted))*100).to_integral_value(rounding=ROUND_HALF_UP))
-        result.append(dict(location=location,item_id=item,name=representative.item_name,period=latest,forecast=predicted,stock=stock,expiring=expiring,need=need,cost=representative.unit_cost,margin=margin,objective=objective,value=value,qty=0))
+    grouped = defaultdict(list)
+    for row in records:
+        grouped[(row.location, row.item_id)].append(row)
+    result = []
+    for (location,item_id), rows in grouped.items():
+        latest = max(r.period for r in rows)
+        current = [r for r in rows if r.period == latest]
+        product = current[0]
+        history = {r.period:r.mth_purchase for r in rows}
+        predicted = forecast(history)
+        stock = sum(r.current_total_stock for r in current)
+        expired = sum(r.current_total_stock for r in current if r.remaining <= 0)
+        usable = stock - expired
+        near_expiry = sum(r.current_total_stock for r in current if 0 < r.remaining <= 14)
+        expired_this_month, loss_source = monthly_expired_units(current)
+        expired_replacement = expired_this_month * EXPIRED_REPLACEMENT_PERCENT // 100
+        need = product.mth_purchase + expired_replacement
+        target = usable + need
+        margin = product.unit_sell-product.unit_cost
+        # Same objective scores as main. Only the per-unit value changes;
+        # quantity and allocation algorithms are shared across objectives.
+        margin_points = max(0, int(margin * 100))
+        if objective == 'Popularity':
+            value = int((Decimal(str(predicted)) * 100).to_integral_value(rounding=ROUND_HALF_UP))
+        elif objective == 'Profit':
+            value = margin_points
+        else:
+            value = 100 + margin_points
+        notes = []
+        if near_expiry:
+            notes.append(f'{near_expiry} near-expiry units remain available; review before buying')
+        if loss_source.startswith('Estimated'):
+            notes.append('Supply mth_expired to include losses already disposed of')
+        if need and value <= 0:
+            notes.append('Zero objective score: no budget allocated')
+        result.append(dict(location=location,item_id=item_id,name=product.item_name,period=latest,
+                           latest_sales=product.mth_purchase,forecast=predicted,
+                           stock=stock,expired=expired,usable=usable,near_expiry=near_expiry,
+                           expired_this_month=expired_this_month,expired_replacement=expired_replacement,
+                           loss_source=loss_source,stock_target=target,need=need,
+                           cost=product.unit_cost,margin=margin,objective=objective,value=value,qty=0,
+                           review='; '.join(notes)))
     return merge_sort(result,lambda r:(-r['value']/int(r['cost']*100),r['location'],r['item_id']))
+
 
 class AllocationCancelled(Exception):
     """A newer UI request has replaced this calculation."""

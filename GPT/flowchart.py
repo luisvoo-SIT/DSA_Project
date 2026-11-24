@@ -131,16 +131,16 @@ class Window(QMainWindow):
         intro = QLabel('Edit one product’s values to see the example calculation update. Switch to Sorting & recommendation to see values on the chart.')
         intro.setWordWrap(True); layout.addWidget(intro)
         form = QFormLayout(); self.inputs = {}
-        specifications = [('unit_cost', 2.0, 2), ('unit_sell', 3.0, 2),
-            ('current_total_stock', 20, 0), ('mth_purchase', 60, 0),
-            ('lead_time', 7, 0), ('shelf_life', 90, 0),
+        specifications = [('unit_cost', 2.0, 2), ('unit_sell', 3.5, 2),
+            ('current_total_stock', 3, 0), ('mth_purchase', 7, 0), ('mth_expired', 40, 0),
+            ('lead_time', 0, 0), ('shelf_life', 20, 0),
             ('supplier_rating', 4, 1), ('budget', 100, 2)]
         for name, default, decimals in specifications:
             spin = QDoubleSpinBox(); spin.setDecimals(decimals)
             spin.setRange(0, 5 if name == 'supplier_rating' else 1000000)
             spin.setValue(default); spin.valueChanged.connect(self.update_preview)
             self.inputs[name] = spin; form.addRow(name.replace('_', ' '), spin)
-        for name, date in [('batch_month', QDate(2026, 5, 1)), ('report_month', QDate(2026, 6, 1))]:
+        for name, date in [('batch_month', QDate(2026, 6, 1)), ('report_month', QDate(2026, 6, 1))]:
             field = QDateEdit(date); field.setDisplayFormat('MM/yyyy'); field.dateChanged.connect(self.update_preview)
             self.inputs[name] = field; form.addRow(name.replace('_', ' '), field)
         layout.addLayout(form)
@@ -161,12 +161,9 @@ class Window(QMainWindow):
         return v
     def preview_values(self):
         v = self.input_values()
-        v['qty_expiry'] = v['current_total_stock'] if v['expiry_duration'] <= 14 else 0
-        demand = v['mth_purchase'] / 30
-        # Illustrative target: cover delivery lead time plus 30 days of sales.
-        target = math.ceil(demand * (v['lead_time'] + 30))
+        v['qty_expiry'] = v['current_total_stock'] if v['expiry_duration'] <= 0 else 0
         usable = max(0, v['current_total_stock'] - v['qty_expiry'])
-        need = max(0, target - usable)
+        need = int(v['mth_purchase']) + int(v['mth_expired']) * 75 // 100
         affordable = math.floor(v['budget'] / v['unit_cost']) if v['unit_cost'] > 0 else 0
         qty = min(need, affordable)
         ratio = (v['unit_sell'] - v['unit_cost']) / v['unit_cost'] if v['unit_cost'] > 0 else None
@@ -180,11 +177,11 @@ class Window(QMainWindow):
     def update_preview(self, *_):
         if not hasattr(self, 'preview_output'): return
         v = self.input_values()
-        v['qty_expiry'] = v['current_total_stock'] if v['expiry_duration'] <= 14 else 0
-        demand = v['mth_purchase'] / 30
-        target = math.ceil(demand * (v['lead_time'] + 30))
+        v['qty_expiry'] = v['current_total_stock'] if v['expiry_duration'] <= 0 else 0
         usable = max(0, v['current_total_stock'] - v['qty_expiry'])
-        need = max(0, target - usable)
+        replaced = int(v['mth_expired']) * 75 // 100
+        need = int(v['mth_purchase']) + replaced
+        target = usable + need
         qty = min(need, math.floor(v['budget'] / v['unit_cost'])) if v['unit_cost'] else 0
         ratio = (v['unit_sell'] - v['unit_cost']) / v['unit_cost'] if v['unit_cost'] else None
         warning = ''
@@ -193,13 +190,15 @@ class Window(QMainWindow):
         if v['unit_cost'] == 0:
             warning = '\nEnter a positive unit cost to calculate affordable quantity.'
         self.preview_output.setText(f"Assumed delivery: {v['delivery_date'].toString('yyyy-MM-dd')}\nRemaining shelf life: {v['expiry_duration']:g} days\n"
-            f"Estimated daily demand: {demand:.2f} units\n"
-            f"Target stock: {target} units\nUsable stock: {usable:g} units\n"
+            f"Sold this month: {v['mth_purchase']:g}; expired this month: {v['mth_expired']:g}\n"
+            f"Replace expired units: floor({v['mth_expired']:g} x 75%) = {replaced}\n"
+            f"Target stock: {target:g} units\nUsable stock: {usable:g} units\n"
             f"Indicative need: {need:g} units\nAffordable recommendation: {qty:g} units\n"
             f"Estimated spend: {qty * v['unit_cost']:.2f}\n"
             f"Profit/cost: {f'{ratio:.2%}' if ratio is not None else 'undefined'}{warning}\n\n"
-            'Example only: assumes a 30-day month, one batch, and 30 days of cover after delivery. '
-            'Batch stock is considered expiring when remaining life is 14 days or less. Shelf life starts at assumed delivery. Supplier rating does not affect this example.')
+            'Single-product quantity example: need = sold + 75% of monthly expired units, rounded down. '
+            'Monthly expired units include already-disposed losses and are separate from stock still on hand. '
+            'Unexpired stock remains available; near-expiry stock should be reviewed. Supplier rating does not affect this example.')
         if hasattr(self, 'scene'):
             live = self.preview_values(); self.scene.live = live
             for node in self.scene.nodes.values(): node.set_text(node.data['text'])

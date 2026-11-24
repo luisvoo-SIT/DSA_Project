@@ -11,7 +11,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (QApplication,QComboBox,QDoubleSpinBox,QFileDialog,QHBoxLayout,QHeaderView,
     QLabel,QLineEdit,QMainWindow,QMessageBox,QPushButton,QTableWidget,QTableWidgetItem,QTabWidget,
     QVBoxLayout,QWidget,QSplitter)
-from inventory import FIELDS, Tree, allocate, expiry_queue, linear_search, load_csv, recommendations
+from inventory import FIELDS, OBJECTIVES, Tree, allocate, expiry_queue, linear_search, load_csv, recommendations
 
 class AllocationSignals(QObject):
     finished = Signal(int, object, object)
@@ -48,8 +48,9 @@ class MainWindow(QMainWindow):
         self.location=QComboBox(); self.location.addItem('All outlets'); self.location.currentTextChanged.connect(self.render); controls.addWidget(QLabel('Outlet:')); controls.addWidget(self.location)
         self.search=QLineEdit(); self.search.setPlaceholderText('Search product name or ID'); self.search.textChanged.connect(self.render); controls.addWidget(self.search)
         self.budget=QDoubleSpinBox(); self.budget.setRange(0,100000000); self.budget.setDecimals(2); self.budget.setValue(100); self.budget.valueChanged.connect(self.recalculate); controls.addWidget(QLabel('Budget:')); controls.addWidget(self.budget)
-        self.objective=QComboBox(); self.objective.addItems(['Profit','Popularity']); self.objective.setToolTip('Profit: gross margin in cents per unit. Popularity: forecast monthly sales multiplied by 100 per unit.'); self.objective.currentTextChanged.connect(self.recalculate); controls.addWidget(QLabel('Restock objective:')); controls.addWidget(self.objective)
+        self.objective=QComboBox(); self.objective.addItems(OBJECTIVES); self.objective.setToolTip('Availability + margin: 100 plus margin cents. Profit: margin cents. Popularity: forecast monthly sales x 100. The same restock quantities are used for every objective.'); self.objective.currentTextChanged.connect(self.recalculate); controls.addWidget(QLabel('Objective:')); controls.addWidget(self.objective)
         self.method=QComboBox(); self.method.addItems(['Greedy','Knapsack']); self.method.currentTextChanged.connect(self.recalculate); controls.addWidget(self.method)
+        self.asof=QComboBox(); self.asof.addItem('Latest imported month',None); self.asof.currentIndexChanged.connect(self.render); controls.addWidget(QLabel('As of:')); controls.addWidget(self.asof)
         self.tabs=QTabWidget(); layout.addWidget(self.tabs)
         inventory_page=QWidget(); inventory_layout=QVBoxLayout(inventory_page)
         filters=QHBoxLayout(); inventory_layout.addLayout(filters)
@@ -87,9 +88,17 @@ class MainWindow(QMainWindow):
         except (ValueError,OSError) as e: QMessageBox.warning(self,'Import failed',str(e))
     def sync(self):
         self.rows=[r for records in self.files.values() for r in records]
+        previous_period=self.asof.currentData(); self.asof.blockSignals(True); self.asof.clear(); self.asof.addItem('Latest imported month',None)
+        for period in sorted({r.period for r in self.rows}): self.asof.addItem(period.strftime('%Y-%m'),period)
+        period_index=next((i for i in range(self.asof.count()) if self.asof.itemData(i)==previous_period),0)
+        self.asof.setCurrentIndex(period_index); self.asof.blockSignals(False)
         previous=self.location.currentText(); self.location.blockSignals(True); self.location.clear(); self.location.addItem('All outlets'); self.location.addItems(sorted({r.location for r in self.rows})); idx=self.location.findText(previous); self.location.setCurrentIndex(max(0,idx)); self.location.blockSignals(False); self.render()
+    def records_asof(self):
+        period=self.asof.currentData()
+        return self.rows if period is None else [r for r in self.rows if r.period<=period]
     def filtered(self):
-        rows=self.rows if self.location.currentText()=='All outlets' else [r for r in self.rows if r.location==self.location.currentText()]
+        records=self.records_asof()
+        rows=records if self.location.currentText()=='All outlets' else [r for r in records if r.location==self.location.currentText()]
         query=self.search.text().strip()
         if query:
             groups={}
@@ -124,15 +133,15 @@ class MainWindow(QMainWindow):
         else:
             # Each point is a batch in an imported snapshot; historical snapshots are included.
             frame=pd.DataFrame([{'remaining':r.remaining,'stock':r.current_total_stock} for r in rows])
-            buckets=pd.cut(frame['remaining'],[-float('inf'),-1,14,30,float('inf')],labels=['Expired','0–14 days','15–30 days','Over 30 days'])
-            totals=frame.groupby(buckets,observed=False)['stock'].sum().reindex(['Expired','0–14 days','15–30 days','Over 30 days'],fill_value=0)
+            buckets=pd.cut(frame['remaining'],[-float('inf'),0,14,30,float('inf')],labels=['Expired / due today','1–14 days','15–30 days','Over 30 days'])
+            totals=frame.groupby(buckets,observed=False)['stock'].sum().reindex(['Expired / due today','1–14 days','15–30 days','Over 30 days'],fill_value=0)
             ax.bar(totals.index,totals.values,color=['#c84949','#ef9857','#e8c35d','#3f9c83']); ax.set_ylabel('Units in snapshots'); ax.set_title('Batch expiry by report date — includes historical snapshots')
         self.expiry_canvas.draw_idle()
     def set_table(self,table,headers,rows,editable=False):
         table.setRowCount(len(rows)); table.setColumnCount(len(headers)); table.setHorizontalHeaderLabels(headers)
         for i,row in enumerate(rows):
             for j,value in enumerate(row):
-                cell=QTableWidgetItem(str(value))
+                cell=QTableWidgetItem('' if value is None else str(value))
                 if not editable or j<2: cell.setFlags(cell.flags() & ~Qt.ItemIsEditable)
                 table.setItem(i,j,cell)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
@@ -158,7 +167,7 @@ class MainWindow(QMainWindow):
             writer=csv.DictWriter(buffer,fieldnames=FIELDS); writer.writeheader()
             for i,r in enumerate(records):
                 data={k:getattr(r,k) for k in FIELDS}
-                if i==field_index or (name=='mth_purchase' and r.item_id==old.item_id):data[name]=value
+                if i==field_index or (name in ('mth_purchase','mth_expired') and r.item_id==old.item_id):data[name]=value
                 writer.writerow(data)
             self.files[source]=load_csv(source, buffer.getvalue())
             self.sync()
@@ -184,7 +193,8 @@ class MainWindow(QMainWindow):
     def _start_allocation(self):
         # Keep at most one worker running. A newer request starts when it finishes.
         if self._allocation_task is not None:return
-        rows=self.rows if self.location.currentText()=='All outlets' else [r for r in self.rows if r.location==self.location.currentText()]
+        records=self.records_asof()
+        rows=records if self.location.currentText()=='All outlets' else [r for r in records if r.location==self.location.currentText()]
         task=AllocationTask(self._generation, list(rows), self.budget.value(), self.method.currentText(), self.objective.currentText())
         self._allocation_task=task
         task.signals.finished.connect(self._allocation_finished)
@@ -202,9 +212,16 @@ class MainWindow(QMainWindow):
             self.all_results=data
             q=self.search.text().strip().casefold(); shown=[r for r in data if q in r['item_id'].casefold() or q in r['name'].casefold()]
             self.draw_recommendations(shown)
-            self.set_table(self.results,['Outlet','ID','Product','Report','Forecast/month','Stock','Expiring ≤14d','Need','Unit cost','Unit margin','Priority score','Allocate','Spend'],[[r['location'],r['item_id'],r['name'],r['period'].strftime('%Y-%m'),f"{r['forecast']:.1f}",r['stock'],r['expiring'],r['need'],r['cost'],r['margin'],r['value'],r['qty'],f"{r['qty']*r['cost']:.2f}"] for r in shown])
+            self.set_table(self.results,
+                ['Outlet','ID','Product','Report','Sold this month','Expired this month','Replace expired (75%)',
+                 'Available stock','New total target','Need','Buy','Stock after removal + allocation',
+                 'Forecast/month','Unit cost','Unit margin','Priority score','Spend','Expiry data','Review'],
+                [[r['location'],r['item_id'],r['name'],r['period'].strftime('%Y-%m'),
+                  r['latest_sales'],r['expired_this_month'],r['expired_replacement'],r['usable'],r['stock_target'],
+                  r['need'],r['qty'],r['usable']+r['qty'],f"{r['forecast']:.1f}",r['cost'],r['margin'],r['value'],
+                  f"{r['qty']*r['cost']:.2f}",r['loss_source'],r['review']] for r in shown])
             spend=sum(r['qty']*r['cost'] for r in data)
-            self.summary.setText(f"Objective: {self.objective.currentText()} · {len(data)} outlet/products · Allocated: {spend:.2f} of {self.budget.value():.2f}. Search filters the display; allocation uses all products in the selected outlets. See README for assumptions.")
+            self.summary.setText(f"Objective: {self.objective.currentText()} · {len(data)} outlet/products · Allocated: {spend:.2f} of {self.budget.value():.2f}. Need = sold + 75% of this month's expired units (rounded down). Use 'As of' to compare months. Search only filters the display.")
         except ValueError as e:
             self.all_results=[]; self.results.setRowCount(0); self.draw_recommendations([]); self.summary.setText(str(e))
     def save_csv(self):
