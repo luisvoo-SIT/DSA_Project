@@ -25,15 +25,18 @@ class MainWindow(QMainWindow):
         self.search=QLineEdit(); self.search.setPlaceholderText('Search product name or ID'); self.search.textChanged.connect(self.render); controls.addWidget(self.search)
         self.budget=QDoubleSpinBox(); self.budget.setRange(0,100000000); self.budget.setDecimals(2); self.budget.setValue(100); self.budget.valueChanged.connect(self.recalculate); controls.addWidget(QLabel('Budget:')); controls.addWidget(self.budget)
         self.method=QComboBox(); self.method.addItems(['Greedy','Knapsack']); self.method.currentTextChanged.connect(self.recalculate); controls.addWidget(self.method)
-        self.tabs=QTabWidget(); layout.addWidget(self.tabs)
+        self.table_controls = QWidget()
+        layout.addWidget(self.table_controls)
         inventory_page=QWidget(); inventory_layout=QVBoxLayout(inventory_page)
-        filters=QHBoxLayout(); inventory_layout.addLayout(filters)
-        self.filter_column=QComboBox(); self.filter_column.addItems(['All columns','Outlet','Report month']+list(FIELDS)); filters.addWidget(QLabel('Filter column:')); filters.addWidget(self.filter_column)
+        filters=QHBoxLayout(self.table_controls)
+        table_columns = ['Outlet', 'Report month', 'Remaining days', *FIELDS]
+        self.filter_column=QComboBox(); self.filter_column.addItems(['All columns', *table_columns]); filters.addWidget(QLabel('Filter column:')); filters.addWidget(self.filter_column)
         self.filter_text=QLineEdit(); self.filter_text.setPlaceholderText('Contains (case-insensitive)'); filters.addWidget(self.filter_text)
-        self.sort_column=QComboBox(); self.sort_column.addItems(['Outlet','Report month']+list(FIELDS)); filters.addWidget(QLabel('Sort by:')); filters.addWidget(self.sort_column)
+        self.sort_column=QComboBox(); self.sort_column.addItems(['Default', *table_columns]); filters.addWidget(QLabel('Sort by:')); filters.addWidget(self.sort_column)
         self.sort_order=QComboBox(); self.sort_order.addItems(['Ascending','Descending']); filters.addWidget(self.sort_order)
         for widget in (self.filter_column,self.sort_column,self.sort_order): widget.currentIndexChanged.connect(self.render)
         self.filter_text.textChanged.connect(self.render)
+        self.tabs=QTabWidget(); layout.addWidget(self.tabs)
         self.table=QTableWidget(); self.table.cellChanged.connect(self.edited); inventory_layout.addWidget(self.table); self.tabs.addTab(inventory_page,'Inventory (editable)')
         self.results=QTableWidget(); self.results.setEditTriggers(QTableWidget.NoEditTriggers)
         self.recommendation_figure=Figure(figsize=(8,4),layout='constrained'); self.recommendation_canvas=FigureCanvasQTAgg(self.recommendation_figure)
@@ -42,7 +45,10 @@ class MainWindow(QMainWindow):
         self.expiry_figure=Figure(figsize=(8,4),layout='constrained'); self.expiry_canvas=FigureCanvasQTAgg(self.expiry_figure)
         expiry_split=QSplitter(Qt.Vertical); expiry_split.addWidget(self.expiry_canvas); expiry_split.addWidget(self.expiry); expiry_split.setSizes([400,300]); self.tabs.addTab(expiry_split,'Expiry queue')
         self.summary=QLabel('Import monthly CSV files to begin.'); self.summary.setWordWrap(True); layout.addWidget(self.summary)
+        self.tabs.currentChanged.connect(self.update_table_controls)
         self.render()
+    def update_table_controls(self, index):
+        self.table_controls.setVisible(index != 1)
     def import_csv(self):
         paths,_=QFileDialog.getOpenFileNames(self,'Import monthly inventory','','CSV files (*.csv)')
         if not paths:return
@@ -72,7 +78,7 @@ class MainWindow(QMainWindow):
             exact=Tree(list(groups.items())).find(query)
             rows=exact if exact is not None else linear_search(rows,query)
         if not rows: return []
-        frame=pd.DataFrame([{'Outlet':r.location,'Report month':r.period, **{f:getattr(r,f) for f in FIELDS}, '_record':r} for r in rows])
+        frame=pd.DataFrame([{'Outlet':r.location,'Report month':r.period.strftime('%Y-%m'), 'Remaining days':r.remaining, **{f:getattr(r,f) for f in FIELDS}, '_record':r} for r in rows])
         term=self.filter_text.text().strip()
         if term:
             column=self.filter_column.currentText()
@@ -80,7 +86,9 @@ class MainWindow(QMainWindow):
             mask=pd.Series(False,index=frame.index)
             for col in columns: mask |= frame[col].astype(str).str.contains(term,case=False,regex=False,na=False)
             frame=frame.loc[mask]
-        frame=frame.sort_values(self.sort_column.currentText(),ascending=self.sort_order.currentText()=='Ascending',kind='stable')
+        sort_column = self.sort_column.currentText()
+        ascending = self.sort_order.currentText() == 'Ascending'
+        frame=frame.sort_values('Outlet' if sort_column == 'Default' else sort_column,ascending=ascending,kind='stable')
         return frame['_record'].tolist()
     def draw_recommendations(self, rows):
         fig=self.recommendation_figure; fig.clear(); ax=fig.add_subplot(111)
@@ -115,7 +123,11 @@ class MainWindow(QMainWindow):
         if not hasattr(self,'table'): return
         self.updating=True; self.visible=self.filtered()
         self.set_table(self.table,['Outlet','Report month']+list(FIELDS),[[r.location,r.period.strftime('%Y-%m')]+[getattr(r,f) for f in FIELDS] for r in self.visible],True)
-        expiry_rows=expiry_queue(self.visible)
+        expiry_rows = self.visible
+        if self.sort_column.currentText() == 'Default':
+            expiry_rows = expiry_queue(expiry_rows)
+            if self.sort_order.currentText() == 'Descending':
+                expiry_rows.reverse()
         self.set_table(self.expiry,['Outlet','Report month','Product','Batch','Remaining days','Batch stock'],[[r.location,r.period.strftime('%Y-%m'),r.item_name,r.batch_no,r.remaining,r.current_total_stock] for r in expiry_rows])
         self.draw_expiry(expiry_rows)
         self.updating=False; self.recalculate()

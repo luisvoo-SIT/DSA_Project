@@ -125,9 +125,12 @@ def recommendations(records):
         usable=stock-expiring
         days=calendar.monthrange(latest.year,latest.month)[1]
         target=math.ceil(predicted/days*(representative.lead_time+30))
-        # Limit the proposed order to expected sales during its shelf life.
-        shelf_cap=math.ceil(predicted/days*representative.shelf_life)
-        need=max(0,min(target-usable,shelf_cap))
+        forecast_year = latest.year + (latest.month == 12)
+        forecast_month = latest.month % 12 + 1
+        forecast_days = calendar.monthrange(forecast_year, forecast_month)[1]
+        # Usable stock already covers part of the demand within the shelf-life window.
+        shelf_cap = math.ceil(predicted / forecast_days * representative.shelf_life)
+        need = max(0, min(target, shelf_cap) - usable)
         margin=representative.unit_sell-representative.unit_cost
         # One point for stock availability plus nonnegative gross margin, per unit.
         value=100+max(0,int((margin*100).to_integral_value(rounding=ROUND_HALF_UP)))
