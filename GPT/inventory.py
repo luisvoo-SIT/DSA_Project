@@ -112,7 +112,12 @@ def forecast(observations):
     slope=sum((x-xmean)*(y-ymean) for x,y in zip(xs,ys))/denom if denom else 0
     return max(0.0,ymean+slope*(xs[-1]+1-xmean))
 
-def recommendations(records):
+OBJECTIVES = ('Availability + margin', 'Popularity', 'Profit')
+
+
+def recommendations(records, objective=OBJECTIVES[0]):
+    if objective not in OBJECTIVES:
+        raise ValueError(f'Unknown objective: {objective}')
     by=defaultdict(list)
     for r in records: by[(r.location,r.item_id)].append(r)
     result=[]
@@ -132,8 +137,13 @@ def recommendations(records):
         shelf_cap = math.ceil(predicted / forecast_days * representative.shelf_life)
         need = max(0, min(target, shelf_cap) - usable)
         margin=representative.unit_sell-representative.unit_cost
-        # One point for stock availability plus nonnegative gross margin, per unit.
-        value=100+max(0,int((margin*100).to_integral_value(rounding=ROUND_HALF_UP)))
+        margin_points = max(0, int(margin * 100))
+        if objective == 'Popularity':
+            value = int((Decimal(str(predicted)) * 100).to_integral_value(rounding=ROUND_HALF_UP))
+        elif objective == 'Profit':
+            value = margin_points
+        else:
+            value = 100 + margin_points
         result.append(dict(location=location,item_id=item,name=representative.item_name,period=latest,forecast=predicted,stock=stock,expiring=expiring,need=need,cost=representative.unit_cost,margin=margin,value=value,qty=0))
     return merge_sort(result,lambda r:(-r['value']/int(r['cost']*100),r['location'],r['item_id']))
 
@@ -143,12 +153,16 @@ def allocate(items, budget, method):
     items=[dict(r,qty=0) for r in items]
     if method=='Greedy':
         for r in items:
+            if r['value'] <= 0:
+                continue
             price=int(r['cost']*100); r['qty']=min(r['need'],cents//price); cents-=r['qty']*price
         return items
     if cents>100000: raise ValueError('Knapsack is limited to a budget of 1,000.00 to keep the desktop application responsive. Use Greedy for larger budgets.')
     # Bounded knapsack, binary-decomposed bundles; sparse Pareto frontier with immutable paths.
     states={0:(0,None)}
     for index,r in enumerate(items):
+        if r['value'] <= 0:
+            continue
         price=int(r['cost']*100); remaining=min(r['need'],cents//price); chunk=1
         while remaining:
             count=min(chunk,remaining); remaining-=count; chunk*=2; weight=price*count; val=r['value']*count

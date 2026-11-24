@@ -10,7 +10,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (QApplication,QComboBox,QDoubleSpinBox,QFileDialog,QHBoxLayout,QHeaderView,
     QLabel,QLineEdit,QMainWindow,QMessageBox,QPushButton,QTableWidget,QTableWidgetItem,QTabWidget,
     QVBoxLayout,QWidget,QSplitter)
-from inventory import FIELDS, Tree, allocate, expiry_queue, linear_search, load_csv, recommendations
+from inventory import FIELDS, OBJECTIVES, Tree, allocate, expiry_queue, linear_search, load_csv, recommendations
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -25,6 +25,11 @@ class MainWindow(QMainWindow):
         self.search=QLineEdit(); self.search.setPlaceholderText('Search product name or ID'); self.search.textChanged.connect(self.render); controls.addWidget(self.search)
         self.budget=QDoubleSpinBox(); self.budget.setRange(0,100000000); self.budget.setDecimals(2); self.budget.setValue(100); self.budget.valueChanged.connect(self.recalculate); controls.addWidget(QLabel('Budget:')); controls.addWidget(self.budget)
         self.method=QComboBox(); self.method.addItems(['Greedy','Knapsack']); self.method.currentTextChanged.connect(self.recalculate); controls.addWidget(self.method)
+        self.objective = QComboBox()
+        self.objective.addItems(OBJECTIVES)
+        self.objective.currentTextChanged.connect(self.recalculate)
+        controls.addWidget(QLabel('Objective:'))
+        controls.addWidget(self.objective)
         self.table_controls = QWidget()
         layout.addWidget(self.table_controls)
         inventory_page=QWidget(); inventory_layout=QVBoxLayout(inventory_page)
@@ -156,10 +161,21 @@ class MainWindow(QMainWindow):
         try:
             # Search is a display filter; the shared budget is allocated across all selected outlets.
             rows=self.rows if self.location.currentText()=='All outlets' else [r for r in self.rows if r.location==self.location.currentText()]
-            data=allocate(recommendations(rows),self.budget.value(),self.method.currentText()); self.all_results=data
+            ranked = recommendations(rows, self.objective.currentText())
+            data=allocate(ranked,self.budget.value(),self.method.currentText()); self.all_results=data
             q=self.search.text().strip().casefold(); shown=[r for r in data if q in r['item_id'].casefold() or q in r['name'].casefold()]
             self.draw_recommendations(shown)
-            self.set_table(self.results,['Outlet','ID','Product','Report','Forecast/month','Stock','Expiring ≤14d','Need','Unit cost','Unit margin','Allocate','Spend'],[[r['location'],r['item_id'],r['name'],r['period'].strftime('%Y-%m'),f"{r['forecast']:.1f}",r['stock'],r['expiring'],r['need'],r['cost'],r['margin'],r['qty'],f"{r['qty']*r['cost']:.2f}"] for r in shown])
+            headers = ['Outlet', 'ID', 'Product', 'Report', 'Forecast/month', 'Stock',
+                       'Expiring ≤14d', 'Need', 'Unit cost', 'Unit margin', 'Allocate',
+                       'Spend', 'Priority points/unit', 'Points per dollar']
+            table_rows = [
+                [r['location'], r['item_id'], r['name'], r['period'].strftime('%Y-%m'),
+                 f"{r['forecast']:.1f}", r['stock'], r['expiring'], r['need'], r['cost'],
+                 r['margin'], r['qty'], f"{r['qty'] * r['cost']:.2f}", r['value'],
+                 f"{r['value'] / r['cost']:.2f}"]
+                for r in shown
+            ]
+            self.set_table(self.results, headers, table_rows)
             spend=sum(r['qty']*r['cost'] for r in data)
             self.summary.setText(f"{len(rows)} batch records · {len(data)} outlet/products · Allocated: {spend:.2f} of {self.budget.value():.2f}. Search filters the display; allocation uses all products in the selected outlets. See README for assumptions.")
         except ValueError as e:
