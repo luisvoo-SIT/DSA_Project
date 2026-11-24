@@ -1,12 +1,10 @@
 """
 CSV importer module with strict schema and business rule validation.
 """
-import calendar
 import csv
-import datetime
 import os
 import re
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 from core.models import BatchRecord, parse_batch_dates
 
 REQUIRED_HEADERS = [
@@ -22,6 +20,8 @@ REQUIRED_HEADERS = [
     "batch_no",
     "supplier_rating",
 ]
+OPTIONAL_HEADERS = ["initial_stock_target", "mth_expired"]
+ALL_HEADERS = REQUIRED_HEADERS + OPTIONAL_HEADERS
 
 FILENAME_REGEX = re.compile(r"^(?P<outlet>.+)_(?P<year>\d{4})_(?P<month>\d{2})\.csv$", re.IGNORECASE)
 
@@ -36,14 +36,14 @@ def parse_filename(filepath: str) -> Tuple[str, int, int]:
         raise ValueError(
             f"Invalid filename '{filename}'. Filename must follow the format 'Outlet_Name_YYYY_MM.csv' (e.g. 'Outlet_A_2026_06.csv')."
         )
-    
+
     outlet = match.group("outlet")
     year = int(match.group("year"))
     month = int(match.group("month"))
-    
+
     if month < 1 or month > 12:
         raise ValueError(f"Invalid month '{month}' in filename '{filename}'. Month must be between 01 and 12.")
-        
+
     return outlet, year, month
 
 
@@ -54,14 +54,13 @@ def validate_price_precision(val_str: str) -> float:
         decimals = clean_str.split(".")[1]
         if len(decimals) > 2:
             raise ValueError(f"Price '{clean_str}' has more than 2 decimal places.")
-    val = float(clean_str)
-    return val
+    return float(clean_str)
 
 
 def import_monthly_csv(filepath: str) -> Tuple[str, int, int, List[BatchRecord]]:
     """
     Imports and validates a monthly inventory CSV file.
-    
+
     Returns:
         (outlet_name, report_year, report_month, list_of_batch_records)
     """
@@ -73,14 +72,14 @@ def import_monthly_csv(filepath: str) -> Tuple[str, int, int, List[BatchRecord]]
     batches: List[BatchRecord] = []
     seen_product_batches: Set[Tuple[str, str]] = set()
     product_purchases: Dict[str, float] = {}
+    product_expired_losses: Dict[str, Optional[int]] = {}
 
     with open(filepath, mode="r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
-        
-        # Check required headers
+
         if not reader.fieldnames:
             raise ValueError(f"File '{os.path.basename(filepath)}' is empty.")
-            
+
         fieldnames_clean = [h.strip() for h in reader.fieldnames if h]
         missing = [h for h in REQUIRED_HEADERS if h not in fieldnames_clean]
         if missing:
@@ -91,7 +90,6 @@ def import_monthly_csv(filepath: str) -> Tuple[str, int, int, List[BatchRecord]]
         row_num = 1
         for row in reader:
             row_num += 1
-            # Strip whitespace
             clean_row = {k.strip(): (v.strip() if v else "") for k, v in row.items() if k}
 
             item_id = clean_row.get("item_id", "")
@@ -105,17 +103,17 @@ def import_monthly_csv(filepath: str) -> Tuple[str, int, int, List[BatchRecord]]
             raw_shelf = clean_row.get("shelf_life", "")
             batch_no = clean_row.get("batch_no", "")
             raw_rating = clean_row.get("supplier_rating", "")
+            raw_initial_target = clean_row.get("initial_stock_target", "")
+            raw_mth_expired = clean_row.get("mth_expired", "")
 
             if not item_id:
                 raise ValueError(f"Row {row_num}: Missing item_id.")
 
-            # Validate batch_no (4-character MMYY text with leading zeroes preserved)
             if len(batch_no) != 4 or not batch_no.isdigit():
                 raise ValueError(
                     f"Row {row_num}: Invalid batch_no '{batch_no}'. Must be 4-character MMYY text (e.g. '0526')."
                 )
 
-            # Reject duplicate product/batch pairs
             pair = (item_id, batch_no)
             if pair in seen_product_batches:
                 raise ValueError(
@@ -123,7 +121,6 @@ def import_monthly_csv(filepath: str) -> Tuple[str, int, int, List[BatchRecord]]
                 )
             seen_product_batches.add(pair)
 
-            # Validate prices (at most 2 decimal places, non-negative)
             try:
                 unit_cost = validate_price_precision(raw_cost)
             except ValueError as e:
@@ -138,7 +135,6 @@ def import_monthly_csv(filepath: str) -> Tuple[str, int, int, List[BatchRecord]]
             if unit_sell < 0:
                 raise ValueError(f"Row {row_num} (item '{item_id}'): unit_sell cannot be negative ({unit_sell}).")
 
-            # Validate stock (non-negative)
             try:
                 current_total_stock = float(raw_stock)
             except ValueError:
@@ -146,7 +142,6 @@ def import_monthly_csv(filepath: str) -> Tuple[str, int, int, List[BatchRecord]]
             if current_total_stock < 0:
                 raise ValueError(f"Row {row_num} (item '{item_id}'): current_total_stock cannot be negative ({current_total_stock}).")
 
-            # Validate mth_purchase (non-negative, must agree across batches for the same product)
             try:
                 mth_purchase = float(raw_purchase)
             except ValueError:
@@ -164,7 +159,6 @@ def import_monthly_csv(filepath: str) -> Tuple[str, int, int, List[BatchRecord]]
             else:
                 product_purchases[item_id] = mth_purchase
 
-            # Validate lead_time and shelf_life (non-negative integers)
             try:
                 lead_time = int(raw_lead)
             except ValueError:
@@ -179,7 +173,6 @@ def import_monthly_csv(filepath: str) -> Tuple[str, int, int, List[BatchRecord]]
             if shelf_life < 0:
                 raise ValueError(f"Row {row_num} (item '{item_id}'): shelf_life cannot be negative ({shelf_life}).")
 
-            # Validate supplier_rating (0-5)
             try:
                 supplier_rating = float(raw_rating)
             except ValueError:
@@ -189,7 +182,31 @@ def import_monthly_csv(filepath: str) -> Tuple[str, int, int, List[BatchRecord]]
                     f"Row {row_num} (item '{item_id}'): supplier_rating must be between 0 and 5 ({supplier_rating})."
                 )
 
-            # Validate dates and assumed delivery vs report date
+            initial_stock_target: Optional[int] = None
+            if raw_initial_target != "":
+                if not re.fullmatch(r"\d+", raw_initial_target):
+                    raise ValueError(
+                        f"Row {row_num} (item '{item_id}'): initial_stock_target must be blank or a non-negative integer."
+                    )
+                initial_stock_target = int(raw_initial_target)
+
+            mth_expired: Optional[int] = None
+            if raw_mth_expired != "":
+                if not re.fullmatch(r"\d+", raw_mth_expired):
+                    raise ValueError(
+                        f"Row {row_num} (item '{item_id}'): mth_expired must be blank or a non-negative integer."
+                    )
+                mth_expired = int(raw_mth_expired)
+
+            if item_id in product_expired_losses:
+                if product_expired_losses[item_id] != mth_expired:
+                    raise ValueError(
+                        f"Row {row_num}: Inconsistent mth_expired for product '{item_id}'. "
+                        "Monthly expiry losses must agree across batches for the same product."
+                    )
+            else:
+                product_expired_losses[item_id] = mth_expired
+
             try:
                 parse_batch_dates(batch_no, lead_time, shelf_life, report_year, report_month)
             except ValueError as e:
@@ -210,6 +227,8 @@ def import_monthly_csv(filepath: str) -> Tuple[str, int, int, List[BatchRecord]]
                 shelf_life=shelf_life,
                 batch_no=batch_no,
                 supplier_rating=supplier_rating,
+                initial_stock_target=initial_stock_target,
+                mth_expired=mth_expired,
             )
             batches.append(record)
 

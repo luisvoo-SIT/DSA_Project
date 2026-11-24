@@ -29,12 +29,14 @@ def allocate_greedy(
 
         if prod.need <= 0 or prod.priority_value <= 0:
             prod.allocated_units = 0
+            prod.projected_stock = int(round(prod.usable_stock))
             prod.allocated_cost = 0.0
             continue
 
         if prod.unit_cost <= 0.0:
             # Free items with positive score: allocate full need
             prod.allocated_units = prod.need
+            prod.projected_stock = int(round(prod.usable_stock)) + prod.need
             prod.allocated_cost = 0.0
             continue
 
@@ -48,6 +50,7 @@ def allocate_greedy(
             cost = round(allocated * prod.unit_cost, 2)
 
         prod.allocated_units = allocated
+        prod.projected_stock = int(round(prod.usable_stock)) + allocated
         prod.allocated_cost = cost
         remaining_budget = round(max(0.0, remaining_budget - cost), 2)
 
@@ -82,6 +85,7 @@ def allocate_knapsack(
     # Reset allocations
     for prod in recommendations:
         prod.allocated_units = 0
+        prod.projected_stock = int(round(prod.usable_stock))
         prod.allocated_cost = 0.0
 
     # Separate free items vs paid items
@@ -145,6 +149,7 @@ def allocate_knapsack(
 
     total_spent = 0.0
     for prod in recommendations:
+        prod.projected_stock = int(round(prod.usable_stock)) + prod.allocated_units
         prod.allocated_cost = round(prod.allocated_units * prod.unit_cost, 2)
         total_spent += prod.allocated_cost
 

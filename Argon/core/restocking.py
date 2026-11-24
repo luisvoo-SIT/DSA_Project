@@ -1,56 +1,74 @@
 """
-Restocking calculation and evaluation logic.
+Restocking calculation and evaluation logic with partial expiry replacement.
 """
 import calendar
-import math
+import datetime
 from typing import Dict, List, Optional, Tuple
 from core.models import BatchRecord, ProductRecommendation
 from core.forecasting import predict_demand
 from core.sorting import merge_sort
 
+EXPIRED_REPLACEMENT_PERCENT = 75
+OBJECTIVES = ("Availability + margin", "Popularity", "Profit")
+
+
+def calculate_monthly_expired_units(current_batches: List[BatchRecord]) -> Tuple[int, str]:
+    """
+    Returns (expired_units_this_month, loss_source) for a product's latest snapshot.
+
+    Uses explicit mth_expired when provided (counted once per product/month);
+    otherwise estimates from batches in the latest snapshot whose expiry date
+    falls within that reporting month so older retained expired stock is not
+    counted again.
+    """
+    explicit_vals = {b.mth_expired for b in current_batches if b.mth_expired is not None}
+    if len(explicit_vals) > 1:
+        raise ValueError("Conflicting mth_expired for the same product/month")
+    if explicit_vals:
+        return int(next(iter(explicit_vals))), "Reported monthly losses"
+
+    report_date = current_batches[0].report_date
+    if report_date is None:
+        report_last_day = calendar.monthrange(current_batches[0].report_year, current_batches[0].report_month)[1]
+        report_date = datetime.date(current_batches[0].report_year, current_batches[0].report_month, report_last_day)
+
+    month_start = report_date.replace(day=1)
+    units = sum(
+        b.current_total_stock
+        for b in current_batches
+        if b.expiry_date is not None and month_start <= b.expiry_date <= report_date
+    )
+    return int(round(units)), "Estimated from current-month expiry dates"
+
 
 def calculate_restocking_recommendations(
     all_batches: List[BatchRecord],
     selected_outlets: Optional[List[str]] = None,
-    objective: str = "Profit",
+    objective: str = OBJECTIVES[0],
+    as_of_ym: Optional[Tuple[int, int]] = None,
 ) -> List[ProductRecommendation]:
     """
-    Computes restocking recommendations across the selected outlets.
-    
-    Steps:
-    1. Filter batches by selected outlets (if specified).
-    2. Group batches by (outlet, item_id).
-    3. For each (outlet, item_id):
-       - Find historical monthly purchases for forecasting.
-       - Identify latest report snapshot (year, month).
-       - In latest snapshot, identify usable stock (> 14 days remaining) and expiring stock (<= 14 days).
-       - Extract product-level price (unit_cost, unit_sell), lead_time, shelf_life, supplier_rating
-         from the first batch in the latest snapshot.
-       - Forecast monthly demand and compute daily demand = monthly_demand / days_in_latest_month.
-       - Target stock = daily_demand * (lead_time + 30).
-       - Raw need = target_stock - usable_stock.
-       - Capped need = min(daily_demand * shelf_life, max(0.0, raw_need)).
-       - need_units = int(round(capped_need)).
-       - Gross margin = max(0.0, unit_sell - unit_cost).
-       - margin_cents = int(round(gross_margin * 100)).
-       - Profit score = non-negative gross margin in cents per unit.
-       - Popularity score = forecast monthly demand multiplied by 100 per unit.
-       - value_per_cost = priority_value / unit_cost if unit_cost > 0 else float('inf').
-    4. Rank products across all selected outlets using merge sort by value_per_cost descending.
+    Computes restocking recommendations across the selected outlets using the
+    75% partial expiry replacement rule:
+      expired_replacement = floor(expired_this_month * 75%)
+      need = latest_month_sales + expired_replacement
+      available (usable) stock = current_stock - expired_on_hand (remaining <= 0)
+      new_total_target = usable_stock + need
     """
-    if objective not in ("Profit", "Popularity"):
+    if objective not in OBJECTIVES:
         raise ValueError(f"Unknown restocking objective: {objective}")
 
+    batches = list(all_batches)
     if selected_outlets is not None:
         selected_set = set(selected_outlets)
-        batches = [b for b in all_batches if b.outlet in selected_set]
-    else:
-        batches = list(all_batches)
+        batches = [b for b in batches if b.outlet in selected_set]
+
+    if as_of_ym is not None:
+        batches = [b for b in batches if (b.report_year, b.report_month) <= as_of_ym]
 
     if not batches:
         return []
 
-    # Group batches by (outlet, item_id)
     grouped: Dict[Tuple[str, str], List[BatchRecord]] = {}
     for b in batches:
         key = (b.outlet, b.item_id)
@@ -61,7 +79,6 @@ def calculate_restocking_recommendations(
     recommendations: List[ProductRecommendation] = []
 
     for (outlet, item_id), prod_batches in grouped.items():
-        # Find all report months available for this product and outlet
         months_dict: Dict[Tuple[int, int], List[BatchRecord]] = {}
         for b in prod_batches:
             m_key = (b.report_year, b.report_month)
@@ -69,16 +86,12 @@ def calculate_restocking_recommendations(
                 months_dict[m_key] = []
             months_dict[m_key].append(b)
 
-        # Build historical purchases list: (year, month, purchase_val)
         history: List[Tuple[int, int, float]] = []
         for (y, m), m_batches in months_dict.items():
-            # Purchases repeat across batches and must agree; count once per month
             history.append((y, m, m_batches[0].mth_purchase))
 
-        # Predict monthly demand
         predicted_monthly = predict_demand(history)
 
-        # Identify latest snapshot
         latest_ym = max(months_dict.keys(), key=lambda ym: (ym[0], ym[1]))
         latest_batches = months_dict[latest_ym]
         latest_year, latest_month = latest_ym
@@ -86,47 +99,46 @@ def calculate_restocking_recommendations(
         days_in_month = calendar.monthrange(latest_year, latest_month)[1]
         daily_demand = predicted_monthly / days_in_month if days_in_month > 0 else 0.0
 
-        # For product-level fields, use first batch in the latest snapshot
         first_batch = latest_batches[0]
         item_name = first_batch.item_name
         category = first_batch.category
         unit_cost = first_batch.unit_cost
         unit_sell = first_batch.unit_sell
-        lead_time = first_batch.lead_time
-        shelf_life = first_batch.shelf_life
         supplier_rating = first_batch.supplier_rating
+        latest_sales = int(round(first_batch.mth_purchase))
 
-        # Calculate usable vs expiring stock in latest snapshot
-        usable_stock = 0.0
-        expiring_stock = 0.0
-        for b in latest_batches:
-            if b.is_expiring:  # remaining_shelf_life <= 14
-                expiring_stock += b.current_total_stock
-            else:
-                usable_stock += b.current_total_stock
+        current_stock = sum(b.current_total_stock for b in latest_batches)
+        expired_stock = sum(b.current_total_stock for b in latest_batches if b.remaining_shelf_life <= 0)
+        usable_stock = current_stock - expired_stock
+        near_expiry_stock = sum(b.current_total_stock for b in latest_batches if 0 < b.remaining_shelf_life <= 14)
+        expiring_stock = expired_stock + near_expiry_stock
 
-        # Target stock covers lead time + 30 days
-        target_stock = daily_demand * (lead_time + 30)
+        expired_this_month, loss_source = calculate_monthly_expired_units(latest_batches)
+        expired_replacement = (expired_this_month * EXPIRED_REPLACEMENT_PERCENT) // 100
+        need_units = latest_sales + expired_replacement
+        target_stock = usable_stock + need_units
 
-        # Raw order need = target_stock - usable_stock
-        raw_need = max(0.0, target_stock - usable_stock)
-
-        # Capped at forecast sales over the product's shelf life
-        max_order = daily_demand * shelf_life
-        capped_need = min(raw_need, max_order)
-        need_units = int(round(capped_need))
-
-        # Objective value calculation
         gross_margin = max(0.0, unit_sell - unit_cost)
         margin_cents = int(round(gross_margin * 100))
-        # Integer scores keep the bounded-knapsack objective exact. Popularity
-        # is forecast units scaled by 100 to retain two decimal places.
-        priority_value = margin_cents if objective == "Profit" else int(round(predicted_monthly * 100))
+        if objective == "Popularity":
+            priority_value = int(round(predicted_monthly * 100))
+        elif objective == "Profit":
+            priority_value = margin_cents
+        else:
+            priority_value = 100 + margin_cents
 
         if unit_cost > 0:
             value_per_cost = priority_value / unit_cost
         else:
-            value_per_cost = float('inf')
+            value_per_cost = float("inf")
+
+        notes: List[str] = []
+        if near_expiry_stock > 0:
+            notes.append(f"{int(round(near_expiry_stock))} near-expiry units remain available; review before buying")
+        if loss_source.startswith("Estimated"):
+            notes.append("Supply mth_expired to include losses already disposed of")
+        if need_units > 0 and priority_value <= 0:
+            notes.append("Zero objective score: no budget allocated")
 
         rec = ProductRecommendation(
             outlet=outlet,
@@ -145,15 +157,21 @@ def calculate_restocking_recommendations(
             value_per_cost=value_per_cost,
             supplier_rating=supplier_rating,
             objective=objective,
+            report_month_str=f"{latest_year:04d}-{latest_month:02d}",
+            latest_sales=latest_sales,
+            current_stock=current_stock,
+            expired_stock=expired_stock,
+            near_expiry_stock=near_expiry_stock,
+            expired_this_month=expired_this_month,
+            expired_replacement=expired_replacement,
+            loss_source=loss_source,
+            projected_stock=int(round(usable_stock)),
+            review_notes="; ".join(notes),
         )
         recommendations.append(rec)
 
-    # Rank products across outlets by value_per_cost descending using Merge Sort
-    ranked = merge_sort(recommendations, key=lambda r: r.value_per_cost, reverse=True)
+    ranked = merge_sort(recommendations, key=lambda r: (r.value_per_cost, -int(r.item_id == "")), reverse=True)
     for idx, r in enumerate(ranked, start=1):
         r.rank = idx
 
     return ranked
-
-
-

@@ -99,5 +99,24 @@ ITM-001,Milk,Dairy,2.00,3.00,10,50,5,30,0626,4.5
         self.assertIn("is after report date", str(ctx.exception))
 
 
+
+    def test_optional_mth_expired_validation(self):
+        sample_dir = os.path.join(os.path.dirname(__file__), "..", "sample_data", "expiry_series")
+        fp = os.path.join(sample_dir, "Outlet_ExpirySeries_2026_07.csv")
+        _, _, _, batches = import_monthly_csv(fp)
+        self.assertEqual(len(batches), 2)
+        self.assertTrue(all(b.mth_expired == 40 for b in batches))
+
+        # Reject conflicting mth_expired across batches of same product
+        bad_content = """item_id,item_name,category,unit_cost,unit_sell,current_total_stock,mth_purchase,lead_time,shelf_life,batch_no,supplier_rating,mth_expired
+ITM-001,Milk,Dairy,2.00,3.00,10,50,5,30,0526,4.5,40
+ITM-001,Milk,Dairy,2.00,3.00,15,50,5,30,0426,4.5,39
+"""
+        csv_path = self._create_temp_csv("Outlet_Test_2026_06.csv", bad_content)
+        with self.assertRaises(ValueError) as ctx:
+            import_monthly_csv(csv_path)
+        self.assertIn("Inconsistent mth_expired", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

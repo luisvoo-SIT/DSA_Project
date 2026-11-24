@@ -1,41 +1,41 @@
 item_id,item_name,category,unit_cost,unit_sell,current_total_stock,mth_purchase,lead_time,shelf_life,batch_no,supplier_rating
-DEMO001,Gummy Bears 100g,Candy,1.20,2.20,44,175,4,270,0826,3.9
-DEMO002,Fruit Gummies 100g,Candy,1.10,2.10,55,171,5,270,0826,4.0
-DEMO003,Chocolate Bar 45g,Candy,0.80,1.50,63,161,6,270,0826,4.1
-DEMO004,Milk Chocolate 100g,Candy,1.70,2.90,85,184,3,270,0826,4.2
-DEMO005,Fruit Chews 80g,Candy,0.90,1.80,29,160,4,270,0826,4.3
-DEMO006,Lollipops 10 pack,Candy,1.30,2.50,56,222,5,270,0826,4.4
-DEMO007,Jelly Beans 100g,Candy,1.40,2.60,50,157,6,270,0826,4.5
-DEMO008,Sour Candy 80g,Candy,1.15,2.20,89,228,3,270,0826,4.6
-DEMO009,Potato Chips Original 60g,Snacks,0.90,1.70,86,187,4,270,0826,4.7
-DEMO010,Barbecue Potato Chips 60g,Snacks,0.95,1.80,26,145,5,270,0826,4.8
-DEMO011,Cheese Crackers 100g,Snacks,1.10,2.00,39,157,6,270,0826,3.8
-DEMO012,Chocolate Cookies 120g,Snacks,1.30,2.40,51,159,3,270,0826,3.9
-DEMO013,Wafer Biscuits 100g,Snacks,1.00,1.90,73,188,4,270,0826,4.0
-DEMO014,Popcorn 80g,Snacks,0.85,1.60,78,169,5,270,0826,4.1
-DEMO015,Mini Pretzels 100g,Snacks,1.10,2.10,27,150,6,270,0826,4.2
-DEMO016,Strawberry Biscuit Sticks 50g,Snacks,1.20,2.20,34,138,3,270,0826,4.3
-DEMO017,Jasmine Rice 1kg,Staples,3.00,4.50,12,37,4,270,0826,4.4
-DEMO018,Rolled Oats 500g,Staples,2.30,3.80,9,23,5,270,0826,4.5
-DEMO019,Wholemeal Bread 400g,Staples,1.70,2.80,17,37,6,45,0826,4.6
-DEMO020,Eggs 10 pack,Staples,2.80,4.20,7,40,3,45,0826,4.7
-DEMO021,Brown Rice 1kg,Staples,3.40,5.00,8,34,4,270,0826,4.8
-DEMO022,Canned Sardines 155g,Staples,1.70,2.80,6,18,5,270,0826,3.8
-DEMO023,Low Sodium Soup 400g,Staples,2.00,3.20,17,44,6,270,0826,3.9
-DEMO024,Green Tea 25 bags,Beverages,2.20,3.50,39,84,3,270,0826,4.0
-DEMO025,Malted Oat Drink 1L,Beverages,2.50,4.00,14,75,4,270,0826,4.1
-DEMO026,Bottled Water 600ml,Beverages,0.45,0.90,17,68,5,270,0826,4.2
-DEMO027,Apple Juice 250ml,Beverages,0.75,1.40,17,54,6,270,0826,4.3
-DEMO028,Orange Juice 250ml,Beverages,0.80,1.50,34,87,3,270,0826,4.4
-DEMO029,Laundry Detergent 1L,Household,4.50,7.20,10,22,4,270,0826,4.5
-DEMO030,Dishwashing Liquid 500ml,Household,2.20,3.60,3,9,5,270,0826,4.6
-DEMO031,Toilet Paper 4 rolls,Household,2.80,4.50,3,13,6,270,0826,4.7
-DEMO032,Facial Tissues 3 pack,Household,2.00,3.30,8,24,3,270,0826,4.8
-DEMO033,Toothpaste 120g,Personal Care,2.20,3.80,9,23,4,270,0826,3.8
-DEMO034,Bath Soap 3 pack,Personal Care,2.60,4.40,12,25,5,270,0826,3.9
-DEMO035,Shampoo 400ml,Personal Care,4.20,6.80,3,8,6,270,0826,4.0
-DEMO036,Soft Toothbrush,Personal Care,1.40,2.50,6,24,3,270,0826,4.1
-DEMO037,Bananas 1kg,Fresh Food,1.80,3.10,9,28,4,45,0826,4.2
-DEMO038,Apples 4 pack,Fresh Food,3.00,4.80,11,29,5,45,0826,4.3
-DEMO039,Carrots 500g,Fresh Food,1.50,2.50,10,22,6,45,0826,4.4
-DEMO040,Fresh Milk 1L,Fresh Food,2.30,3.80,6,34,3,45,0826,4.5
+DEMO001,Gummy Bears 100g,Candy,1.40,2.19,44,175,4,270,0826,3.9
+DEMO002,Fruit Gummies 100g,Candy,1.53,1.73,55,171,5,270,0826,4.0
+DEMO003,Chocolate Bar 45g,Candy,1.68,2.78,63,161,6,270,0826,4.1
+DEMO004,Milk Chocolate 100g,Candy,1.11,2.35,85,184,3,270,0826,4.2
+DEMO005,Fruit Chews 80g,Candy,2.19,2.46,29,160,4,270,0826,4.3
+DEMO006,Lollipops 10 pack,Candy,1.80,3.67,56,222,5,270,0826,4.4
+DEMO007,Jelly Beans 100g,Candy,2.39,3.88,50,157,6,270,0826,4.5
+DEMO008,Sour Candy 80g,Candy,1.56,2.99,89,228,3,270,0826,4.6
+DEMO009,Potato Chips Original 60g,Snacks,1.83,2.31,86,187,4,270,0826,4.7
+DEMO010,Barbecue Potato Chips 60g,Snacks,2.06,3.03,26,145,5,270,0826,4.8
+DEMO011,Cheese Crackers 100g,Snacks,3.65,7.30,39,157,6,270,0826,3.8
+DEMO012,Chocolate Cookies 120g,Snacks,0.98,1.84,51,159,3,270,0826,3.9
+DEMO013,Wafer Biscuits 100g,Snacks,4.32,4.87,73,188,4,270,0826,4.0
+DEMO014,Popcorn 80g,Snacks,2.47,3.03,78,169,5,270,0826,4.1
+DEMO015,Mini Pretzels 100g,Snacks,1.81,2.55,27,150,6,270,0826,4.2
+DEMO016,Strawberry Biscuit Sticks 50g,Snacks,4.02,7.14,34,138,3,270,0826,4.3
+DEMO017,Jasmine Rice 1kg,Staples,4.98,8.76,12,37,4,270,0826,4.4
+DEMO018,Rolled Oats 500g,Staples,2.01,2.65,9,23,5,270,0826,4.5
+DEMO019,Wholemeal Bread 400g,Staples,2.44,4.43,17,37,6,45,0826,4.6
+DEMO020,Eggs 10 pack,Staples,7.73,15.72,7,40,3,45,0826,4.7
+DEMO021,Brown Rice 1kg,Staples,8.36,12.69,8,34,4,270,0826,4.8
+DEMO022,Canned Sardines 155g,Staples,6.91,14.35,6,18,5,270,0826,3.8
+DEMO023,Low Sodium Soup 400g,Staples,4.52,9.70,17,44,6,270,0826,3.9
+DEMO024,Green Tea 25 bags,Beverages,3.28,5.15,39,84,3,270,0826,4.0
+DEMO025,Malted Oat Drink 1L,Beverages,0.69,1.34,14,75,4,270,0826,4.1
+DEMO026,Bottled Water 600ml,Beverages,1.82,2.09,17,68,5,270,0826,4.2
+DEMO027,Apple Juice 250ml,Beverages,4.90,8.54,17,54,6,270,0826,4.3
+DEMO028,Orange Juice 250ml,Beverages,4.24,7.61,34,87,3,270,0826,4.4
+DEMO029,Laundry Detergent 1L,Household,10.26,18.88,10,22,4,270,0826,4.5
+DEMO030,Dishwashing Liquid 500ml,Household,14.18,18.27,3,9,5,270,0826,4.6
+DEMO031,Toilet Paper 4 rolls,Household,9.76,14.58,3,13,6,270,0826,4.7
+DEMO032,Facial Tissues 3 pack,Household,13.90,19.59,8,24,3,270,0826,4.8
+DEMO033,Toothpaste 120g,Personal Care,3.72,5.97,9,23,4,270,0826,3.8
+DEMO034,Bath Soap 3 pack,Personal Care,12.10,14.35,12,25,5,270,0826,3.9
+DEMO035,Shampoo 400ml,Personal Care,11.86,17.48,3,8,6,270,0826,4.0
+DEMO036,Soft Toothbrush,Personal Care,8.62,11.51,6,24,3,270,0826,4.1
+DEMO037,Bananas 1kg,Fresh Food,4.79,6.28,9,28,4,45,0826,4.2
+DEMO038,Apples 4 pack,Fresh Food,6.74,7.78,11,29,5,45,0826,4.3
+DEMO039,Carrots 500g,Fresh Food,7.30,14.86,10,22,6,45,0826,4.4
+DEMO040,Fresh Milk 1L,Fresh Food,1.70,2.62,6,34,3,45,0826,4.5

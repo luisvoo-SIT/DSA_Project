@@ -114,7 +114,7 @@ class FlowchartScene(QGraphicsScene):
             ("Validation & Delivery Check", "Verify non-negative quantities, date integrity & delivery <= report date."),
             ("Batch Expiry Inspection", "Min-heap Priority Queue orders batches by remaining shelf life. Flag <= 14d."),
             ("Demand Forecasting", "Linear regression across calendar month indices; 1-month uses purchases; clamp >= 0."),
-            ("Usable Stock & Need", "Target = Daily * (Lead + 30). Exclude expiring stock. Cap need at shelf-life sales."),
+            ("Replacement Need & Target", "Need = Sold + floor(75% * Expired This Month). Target = Available + Need."),
             ("Priority Ranking", "Availability score (100) + gross margin cents. Merge sort ranks value per cost."),
             ("Budget Allocation", "Shared budget: Greedy buys in rank order; Bounded Knapsack maximizes score <= $1000."),
             ("Decision Support Export", "Display top 20 chart, full data table, and export recommendations CSV."),
@@ -270,14 +270,20 @@ class ProcessDiagramWindow(QWidget):
         r2.addWidget(QLabel("Mth 1 Purchase:"))
         self.p1_spin = QSpinBox()
         self.p1_spin.setRange(0, 10000)
-        self.p1_spin.setValue(80)
+        self.p1_spin.setValue(7)
         r2.addWidget(self.p1_spin)
 
-        r2.addWidget(QLabel("Mth 2 Purchase:"))
+        r2.addWidget(QLabel("Sold This Mth:"))
         self.p2_spin = QSpinBox()
         self.p2_spin.setRange(0, 10000)
-        self.p2_spin.setValue(95)
+        self.p2_spin.setValue(7)
         r2.addWidget(self.p2_spin)
+
+        r2.addWidget(QLabel("Expired This Mth:"))
+        self.expired_spin = QSpinBox()
+        self.expired_spin.setRange(0, 10000)
+        self.expired_spin.setValue(40)
+        r2.addWidget(self.expired_spin)
         in_layout.addLayout(r2)
 
         # Row 3: Lead Time & Shelf Life
@@ -300,7 +306,7 @@ class ProcessDiagramWindow(QWidget):
         r4.addWidget(QLabel("Usable Stock:"))
         self.stock_spin = QSpinBox()
         self.stock_spin.setRange(0, 10000)
-        self.stock_spin.setValue(15)
+        self.stock_spin.setValue(3)
         r4.addWidget(self.stock_spin)
 
         r4.addWidget(QLabel("Budget ($):"))
@@ -333,6 +339,8 @@ class ProcessDiagramWindow(QWidget):
         self.sell_spin.valueChanged.connect(self._recalculate_illustration)
         self.p1_spin.valueChanged.connect(self._recalculate_illustration)
         self.p2_spin.valueChanged.connect(self._recalculate_illustration)
+        self.expired_spin.valueChanged.connect(self._recalculate_illustration)
+        self.expired_spin.valueChanged.connect(self._recalculate_illustration)
         self.lead_spin.valueChanged.connect(self._recalculate_illustration)
         self.shelf_spin.valueChanged.connect(self._recalculate_illustration)
         self.stock_spin.valueChanged.connect(self._recalculate_illustration)
@@ -345,37 +353,36 @@ class ProcessDiagramWindow(QWidget):
         cost = self.cost_spin.value()
         sell = self.sell_spin.value()
         p1 = self.p1_spin.value()
-        p2 = self.p2_spin.value()
+        sold = self.p2_spin.value()
+        mth_expired = self.expired_spin.value()
         lead = self.lead_spin.value()
         shelf = self.shelf_spin.value()
         usable_stock = self.stock_spin.value()
         budget = self.budget_spin.value()
         method = self.method_combo.currentText()
 
-        # Step 1: Demand Forecast
-        history = [(2026, 5, float(p1)), (2026, 6, float(p2))]
+        # Step 1: Demand Forecast (used for Popularity objective)
+        history = [(2026, 5, float(p1)), (2026, 6, float(sold))]
         forecast_monthly = predict_demand(history)
-        days_in_month = 30  # June
+        days_in_month = 30
         daily_demand = forecast_monthly / days_in_month
 
-        # Step 2: Target Stock
-        target_stock = daily_demand * (lead + 30)
+        # Step 2: 75% Partial Expiry Replacement Rule
+        replaced = (mth_expired * 75) // 100
+        need_units = sold + replaced
+        target_stock = usable_stock + need_units
 
-        # Step 3: Order Need
-        raw_need = max(0.0, target_stock - usable_stock)
-        shelf_life_cap = daily_demand * shelf
-        need_units = int(round(min(raw_need, shelf_life_cap)))
-
-        # Step 4: Illustrative Priority Value & Score
+        # Step 3: Priority Scoring across all 3 objectives
         gross_margin = max(0.0, sell - cost)
         margin_cents = int(round(gross_margin * 100))
-        priority_value = margin_cents
+        avail_margin_score = 100 + margin_cents
+        profit_score = margin_cents
         popularity_value = int(round(forecast_monthly * 100))
-        val_per_cost = priority_value / cost if cost > 0 else float('inf')
+        val_per_cost = avail_margin_score / cost if cost > 0 else float("inf")
 
-        # Step 5: Restocking Simulation
+        # Step 4: Restocking Simulation
         can_afford = int(math.floor(budget / cost)) if cost > 0 else need_units
-        allocated_units = min(need_units, can_afford) if priority_value > 0 else 0
+        allocated_units = min(need_units, can_afford) if avail_margin_score > 0 else 0
         allocated_cost = allocated_units * cost
         rem_budget = budget - allocated_cost
 
@@ -383,38 +390,32 @@ class ProcessDiagramWindow(QWidget):
 LIVE DECISION MODEL STEP-BY-STEP BREAKDOWN
 ========================================================================
 
-1. DEMAND FORECASTING (Linear Regression):
-   Historical Months: Month 1 = {p1} units, Month 2 = {p2} units
-   Linear Trend Slope: {p2 - p1:+d} units/month
-   Forecasted Monthly Demand: {forecast_monthly:.2f} units
-   Days in Snapshot Month: {days_in_month} days
-   -> Daily Demand: {forecast_monthly:.2f} / {days_in_month} = {daily_demand:.3f} units/day
+1. DEMAND FORECASTING (Linear Regression for Popularity Score):
+   Historical Months: Month 1 = {p1} units, Current Month Sold = {sold} units
+   Linear Trend Slope: {sold - p1:+d} units/month
+   Forecasted Monthly Demand: {forecast_monthly:.2f} units ({daily_demand:.2f} units/day)
 
-2. TARGET STOCK & USABLE INVENTORY:
-   Supplier Lead Time: {lead} days (Coverage buffer: lead_time + 30 = {lead + 30} days)
-   Target Stock: {daily_demand:.3f} * {lead + 30} = {target_stock:.2f} units
-   Current Usable Stock: {usable_stock} units
-   Raw Stock Deficit: max(0, {target_stock:.2f} - {usable_stock}) = {raw_need:.2f} units
+2. PARTIAL EXPIRY REPLACEMENT RULE (75% Expiry Replacement):
+   Sold This Month: {sold} units; Expired This Month: {mth_expired} units
+   Replace Expired Units: floor({mth_expired} x 75%) = {replaced} units
+   Indicative Need: {sold} + {replaced} = {need_units} units
+   Usable (Unexpired) Stock: {usable_stock} units
+   Target Stock: {usable_stock} + {need_units} = {target_stock} units
+   (Lead Time: {lead}d, Shelf Life: {shelf}d)
 
-3. SHELF LIFE CAP & DISCRETE ORDER NEED:
-   Product Shelf Life: {shelf} days
-   Forecast Sales over Shelf Life: {daily_demand:.3f} * {shelf} = {shelf_life_cap:.2f} units
-   Order Need (units): min({raw_need:.2f}, {shelf_life_cap:.2f}) -> {need_units} discrete units
-
-4. PRIORITY SCORING:
+3. PRIORITY SCORING (Three Selectable Objectives):
    Gross Margin: ${sell:.2f} - ${cost:.2f} = ${gross_margin:.2f} ({margin_cents} cents)
-   Profit score: {priority_value} points/unit (margin in cents)
-   Popularity score: {forecast_monthly:.2f} x 100 = {popularity_value} points/unit
-   Unit Cost: ${cost:.2f}
-   -> Profit score per dollar: {priority_value} / {cost:.2f} = {val_per_cost:.2f} pts/$
+   - Availability + margin score: 100 + {margin_cents} = {avail_margin_score} points/unit
+   - Profit score: {profit_score} points/unit (margin in cents)
+   - Popularity score: {forecast_monthly:.2f} x 100 = {popularity_value} points/unit
+   Unit Cost: ${cost:.2f} -> Value/Cost Ratio: {val_per_cost:.2f} pts/$
 
-5. PROFIT MODE, SINGLE-PRODUCT SIMULATION ({method}):
+4. SINGLE-PRODUCT BUDGET SIMULATION ({method}):
    Available Restocking Budget: ${budget:.2f}
-   Discrete Need: {need_units} units @ ${cost:.2f}
+   Indicative Need: {need_units} units @ ${cost:.2f}
    Max Affordable Quantity: floor(${budget:.2f} / ${cost:.2f}) = {can_afford} units
-   -> Allocated Restock: {allocated_units} units
-   -> Total Restock Spend: ${allocated_cost:.2f}
-   -> Remaining Budget: ${rem_budget:.2f}
+   -> Affordable Recommendation: {allocated_units} units
+   -> Estimated Spend: ${allocated_cost:.2f} (Remaining Budget: ${rem_budget:.2f})
 ========================================================================"""
         self.output_view.setPlainText(text)
 

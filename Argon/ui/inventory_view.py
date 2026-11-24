@@ -29,6 +29,8 @@ class BatchTableModel(QAbstractTableModel):
         ("unit_sell", "Unit Sell ($)", True),
         ("current_total_stock", "Stock", True),
         ("mth_purchase", "Mth Purchase", True),
+        ("mth_expired", "Mth Expired", True),
+        ("mth_expired", "Mth Expired", True),
         ("lead_time", "Lead Time (d)", True),
         ("shelf_life", "Shelf Life (d)", True),
         ("batch_no", "Batch No", False),
@@ -63,6 +65,8 @@ class BatchTableModel(QAbstractTableModel):
                     "unit_sell": b.unit_sell,
                     "current_total_stock": b.current_total_stock,
                     "mth_purchase": b.mth_purchase,
+                    "mth_expired": "" if b.mth_expired is None else b.mth_expired,
+                    "mth_expired": "" if b.mth_expired is None else b.mth_expired,
                     "lead_time": b.lead_time,
                     "shelf_life": b.shelf_life,
                     "batch_no": b.batch_no,
@@ -108,6 +112,10 @@ class BatchTableModel(QAbstractTableModel):
                 return f"{float(val):.2f}"
             elif col_key in ("current_total_stock", "mth_purchase"):
                 return f"{int(val)}" if float(val).is_integer() else f"{float(val):.1f}"
+            elif col_key == "mth_expired":
+                return "" if (val == "" or val is None or int(val) < 0) else str(int(val))
+            elif col_key == "mth_expired":
+                return "" if (val == "" or val is None or int(val) < 0) else str(int(val))
             elif col_key == "supplier_rating":
                 return f"{float(val):.1f}"
             elif col_key in ("remaining_shelf_life", "lead_time", "shelf_life"):
@@ -115,7 +123,7 @@ class BatchTableModel(QAbstractTableModel):
             return str(val)
 
         if role == Qt.ItemDataRole.TextAlignmentRole:
-            if col_key in ("unit_cost", "unit_sell", "current_total_stock", "mth_purchase",
+            if col_key in ("unit_cost", "unit_sell", "current_total_stock", "mth_purchase", "mth_expired",
                            "lead_time", "shelf_life", "supplier_rating", "remaining_shelf_life"):
                 return int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             elif col_key in ("status_label", "report_month_str", "batch_no"):
@@ -157,6 +165,30 @@ class BatchTableModel(QAbstractTableModel):
                     if (b.outlet == target_outlet and b.report_year == target_year and
                         b.report_month == target_month and b.item_id == target_item):
                         b.mth_purchase = new_val
+
+            elif col_key == "mth_expired":
+                if str_val == "":
+                    new_exp = None
+                else:
+                    if not str_val.isdigit():
+                        raise ValueError("Monthly expired units must be blank or a non-negative integer.")
+                    new_exp = int(str_val)
+                for b in self.master_batches:
+                    if (b.outlet == batch.outlet and b.report_year == batch.report_year and
+                        b.report_month == batch.report_month and b.item_id == batch.item_id):
+                        b.mth_expired = new_exp
+
+            elif col_key == "mth_expired":
+                if str_val == "":
+                    new_exp = None
+                else:
+                    if not str_val.isdigit():
+                        raise ValueError("Monthly expired units must be blank or a non-negative integer.")
+                    new_exp = int(str_val)
+                for b in self.master_batches:
+                    if (b.outlet == batch.outlet and b.report_year == batch.report_year and
+                        b.report_month == batch.report_month and b.item_id == batch.item_id):
+                        b.mth_expired = new_exp
 
             elif col_key == "item_name":
                 if not str_val:
@@ -354,6 +386,8 @@ class InventoryView(QWidget):
                 "unit_sell": float(b.unit_sell),
                 "current_total_stock": float(b.current_total_stock),
                 "mth_purchase": float(b.mth_purchase),
+                "mth_expired": -1 if b.mth_expired is None else int(b.mth_expired),
+                "mth_expired": -1 if b.mth_expired is None else int(b.mth_expired),
                 "lead_time": int(b.lead_time),
                 "shelf_life": int(b.shelf_life),
                 "batch_no": b.batch_no,

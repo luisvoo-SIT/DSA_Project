@@ -18,8 +18,10 @@ A PySide6 desktop prototype for viewing monthly outlet inventory, inspecting bat
 
 - **Demand Forecasting & Restocking Allocation**:
   - Calendar month index **Linear Regression** for products with $\ge 2$ historical months; single-month purchase pass-through for 1 month; clamped at $\ge 0$.
-  - Target stock covering supplier lead time plus 30 days. Expiring stock ($\le 14$ days remaining) is strictly excluded from usable inventory.
-  - Restocking need capped at forecast sales over the product's shelf life.
+  - Restocking need uses one replacement rule: **units sold this month + floor(75% of units expired this month)**. The new total target is current unexpired stock plus that need.
+  - Optional `mth_expired` records actual monthly expiry losses (including disposed stock); without it, losses are estimated from batches whose expiry date falls within the reporting month.
+  - Unexpired stock (including near-expiry 1–14d stock, which is flagged for review) remains available; expired/due-today units ($\le 0$d) are excluded.
+  - Three selectable objectives: **Availability + margin** (default, $100 + \text{margin cents}$), **Popularity** ($\text{forecast} \times 100$), and **Profit** ($\text{margin cents}$).
   - Choose a restocking objective: **Profit** scores each unit by non-negative gross margin in cents; **Popularity** scores each unit by its outlet's forecast monthly sales multiplied by 100 (rounded to an integer). A score of zero receives no allocation.
   - Both objectives use the forecast-based need cap, usable stock, lead time and shelf life. Scores are per outlet and are calculated from imported history; they are not stored in input CSVs. Popularity is a priority score, not predicted sales of the allocated units, and may concentrate spending on a few products. Profit assumes units sell at the stated price and excludes operating costs and waste.
   - Explicit **Merge Sort** ranking items by value per cost.

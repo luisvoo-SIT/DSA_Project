@@ -1,6 +1,6 @@
 import calendar
 import datetime
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -11,30 +11,30 @@ def parse_batch_dates(batch_no: str, lead_time: int, shelf_life: int, report_yea
     """
     if not isinstance(batch_no, str) or len(batch_no) != 4 or not batch_no.isdigit():
         raise ValueError(f"Invalid batch_no '{batch_no}': must be 4-digit MMYY text.")
-    
+
     batch_mm = int(batch_no[:2])
     batch_yy = int(batch_no[2:])
     if batch_mm < 1 or batch_mm > 12:
         raise ValueError(f"Invalid month in batch_no '{batch_no}': month must be 01-12.")
-    
+
     order_year = 2000 + batch_yy
     order_last_day = calendar.monthrange(order_year, batch_mm)[1]
     order_date = datetime.date(order_year, batch_mm, order_last_day)
-    
+
     delivery_date = order_date + datetime.timedelta(days=int(lead_time))
-    
+
     report_last_day = calendar.monthrange(report_year, report_month)[1]
     report_date = datetime.date(report_year, report_month, report_last_day)
-    
+
     if delivery_date > report_date:
         raise ValueError(
             f"Batch {batch_no} assumed delivery date ({delivery_date}) is after report date ({report_date})."
         )
-    
+
     expiry_date = delivery_date + datetime.timedelta(days=int(shelf_life))
     remaining_shelf_life = (expiry_date - report_date).days
     is_expiring = remaining_shelf_life <= 14
-    
+
     return {
         "order_date": order_date,
         "delivery_date": delivery_date,
@@ -61,7 +61,9 @@ class BatchRecord:
     shelf_life: int
     batch_no: str
     supplier_rating: float
-    
+    initial_stock_target: Optional[int] = None
+    mth_expired: Optional[int] = None
+
     # Computed fields
     order_date: Optional[datetime.date] = None
     delivery_date: Optional[datetime.date] = None
@@ -69,14 +71,14 @@ class BatchRecord:
     report_date: Optional[datetime.date] = None
     remaining_shelf_life: int = 0
     is_expiring: bool = False
-    
+
     def __post_init__(self):
         # Normalize batch_no to 4 digits with leading zeroes
         if isinstance(self.batch_no, (int, float)):
             self.batch_no = f"{int(self.batch_no):04d}"
         else:
             self.batch_no = str(self.batch_no).strip().zfill(4)
-            
+
         dates = parse_batch_dates(
             self.batch_no, self.lead_time, self.shelf_life, self.report_year, self.report_month
         )
@@ -90,6 +92,14 @@ class BatchRecord:
     @property
     def report_month_str(self) -> str:
         return f"{self.report_year:04d}-{self.report_month:02d}"
+
+    @property
+    def is_expired(self) -> bool:
+        return self.remaining_shelf_life <= 0
+
+    @property
+    def is_near_expiry(self) -> bool:
+        return 0 < self.remaining_shelf_life <= 14
 
 
 @dataclass
@@ -112,4 +122,14 @@ class ProductRecommendation:
     allocated_units: int = 0
     allocated_cost: float = 0.0
     supplier_rating: float = 0.0
-    objective: str = "Profit"
+    objective: str = "Availability + margin"
+    report_month_str: str = ""
+    latest_sales: int = 0
+    current_stock: float = 0.0
+    expired_stock: float = 0.0
+    near_expiry_stock: float = 0.0
+    expired_this_month: int = 0
+    expired_replacement: int = 0
+    loss_source: str = "Estimated from current-month expiry dates"
+    projected_stock: int = 0
+    review_notes: str = ""

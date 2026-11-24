@@ -1,16 +1,17 @@
 """
-Restocking Recommendations View with budget allocation, embedded Matplotlib chart,
-AVL Tree exact ID search, and linear partial search.
+Restocking Recommendations View with partial expiry replacement, 3 objectives,
+As-of reporting month selector, embedded Matplotlib chart, AVL Tree exact ID search,
+and linear partial search.
 """
-from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, Signal
+import math
+from typing import Dict, List, Optional, Tuple
+from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QTableView, QHeaderView,
     QLabel, QLineEdit, QComboBox, QDoubleSpinBox, QFrame, QMessageBox
 )
-import pandas as pd
-from typing import Dict, List, Optional
 from core.models import BatchRecord, ProductRecommendation
-from core.restocking import calculate_restocking_recommendations
+from core.restocking import OBJECTIVES, calculate_restocking_recommendations
 from core.allocation import allocate_budget
 from core.bst import AVLTree
 from ui.chart_canvas import MatplotlibCanvas, plot_recommendations_chart
@@ -24,20 +25,26 @@ class RecommendationTableModel(QAbstractTableModel):
         ("outlet", "Outlet"),
         ("item_id", "Item ID"),
         ("item_name", "Item Name"),
-        ("category", "Category"),
+        ("report_month_str", "Report"),
+        ("latest_sales", "Sold"),
+        ("predicted_monthly_demand", "Forecast/Mth"),
+        ("current_stock", "Current Stock"),
+        ("expired_stock", "Expired"),
+        ("usable_stock", "Available"),
+        ("near_expiry_stock", "Near Expiry (<=14d)"),
+        ("expired_this_month", "Expired This Mth"),
+        ("loss_source", "Loss Source"),
+        ("expired_replacement", "Replace 75%"),
+        ("need", "Buy Need"),
+        ("target_stock", "New Target"),
         ("unit_cost", "Unit Cost ($)"),
         ("unit_sell", "Unit Sell ($)"),
-        ("predicted_monthly_demand", "Forecast Monthly Sales"),
-        ("daily_demand", "Daily Demand"),
-        ("target_stock", "Target Stock"),
-        ("usable_stock", "Usable Stock"),
-        ("expiring_stock", "Expiring Stock"),
-        ("need", "Need"),
-        ("allocated_units", "Allocated"),
-        ("allocated_cost", "Allocated Cost ($)"),
         ("priority_value", "Priority Score"),
         ("value_per_cost", "Value/Cost"),
-        ("supplier_rating", "Supplier Rating"),
+        ("allocated_units", "Allocated"),
+        ("projected_stock", "Projected Stock"),
+        ("allocated_cost", "Spend ($)"),
+        ("review_notes", "Review"),
     ]
 
     def __init__(self, parent=None):
@@ -72,25 +79,25 @@ class RecommendationTableModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.DisplayRole:
             if col_key in ("unit_cost", "unit_sell", "allocated_cost"):
                 return f"{float(val):.2f}"
-            elif col_key in ("predicted_monthly_demand", "daily_demand", "target_stock"):
+            elif col_key == "predicted_monthly_demand":
                 return f"{float(val):.1f}"
-            elif col_key in ("usable_stock", "expiring_stock"):
+            elif col_key in ("current_stock", "expired_stock", "usable_stock", "near_expiry_stock", "target_stock"):
                 return f"{int(val)}" if float(val).is_integer() else f"{float(val):.1f}"
-            elif col_key in ("rank", "need", "allocated_units", "priority_value"):
+            elif col_key in ("rank", "latest_sales", "expired_this_month", "expired_replacement",
+                             "need", "allocated_units", "projected_stock", "priority_value"):
                 return str(int(val))
             elif col_key == "value_per_cost":
-                import math
                 return "INF" if math.isinf(val) else f"{float(val):.2f}"
-            elif col_key == "supplier_rating":
-                return f"{float(val):.1f}"
             return str(val)
 
         if role == Qt.ItemDataRole.TextAlignmentRole:
-            if col_key in ("rank", "outlet", "item_id"):
+            if col_key in ("rank", "outlet", "item_id", "report_month_str"):
                 return int(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-            elif col_key in ("unit_cost", "unit_sell", "predicted_monthly_demand", "daily_demand", "target_stock",
-                           "usable_stock", "expiring_stock", "need", "allocated_units",
-                           "allocated_cost", "priority_value", "value_per_cost", "supplier_rating"):
+            elif col_key in ("unit_cost", "unit_sell", "predicted_monthly_demand", "latest_sales",
+                             "current_stock", "expired_stock", "usable_stock", "near_expiry_stock",
+                             "expired_this_month", "expired_replacement", "target_stock", "need",
+                             "allocated_units", "projected_stock", "allocated_cost",
+                             "priority_value", "value_per_cost"):
                 return int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             return int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
@@ -107,8 +114,9 @@ class RecommendationTableModel(QAbstractTableModel):
 
 class RecommendationsView(QWidget):
     """
-    Recommendations tab with restocking calculation, shared budget allocation,
-    embedded Matplotlib chart for the first 20 products, and dual search (BST + Linear).
+    Recommendations tab with 75% partial expiry replacement, 3 restocking objectives,
+    As-of month selector, shared budget allocation, embedded Matplotlib chart for the
+    first 20 products, and dual search (AVL BST + Linear).
     """
 
     def __init__(self, parent=None):
@@ -126,15 +134,13 @@ class RecommendationsView(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
 
-        # Controls Bar
         ctrl_frame = QFrame()
         ctrl_frame.setFrameShape(QFrame.Shape.StyledPanel)
         ctrl_layout = QHBoxLayout(ctrl_frame)
         ctrl_layout.setContentsMargins(8, 6, 8, 6)
-        ctrl_layout.setSpacing(12)
+        ctrl_layout.setSpacing(10)
 
-        # Budget Input
-        ctrl_layout.addWidget(QLabel("Shared Restocking Budget ($):"))
+        ctrl_layout.addWidget(QLabel("Budget ($):"))
         self.budget_spin = QDoubleSpinBox()
         self.budget_spin.setRange(0.0, 100000.0)
         self.budget_spin.setValue(500.0)
@@ -143,28 +149,35 @@ class RecommendationsView(QWidget):
         self.budget_spin.setPrefix("$ ")
         ctrl_layout.addWidget(self.budget_spin)
 
-        ctrl_layout.addWidget(QLabel("Restock objective:"))
+        ctrl_layout.addWidget(QLabel("Objective:"))
         self.objective_combo = QComboBox()
-        self.objective_combo.addItem("Profit", "Profit")
-        self.objective_combo.addItem("Popularity", "Popularity")
-        self.objective_combo.setToolTip("Profit: gross margin in cents per unit. Popularity: forecast monthly sales multiplied by 100 per unit.")
+        for obj in OBJECTIVES:
+            self.objective_combo.addItem(obj, obj)
+        self.objective_combo.setToolTip(
+            "Availability + margin: 100 plus margin cents. "
+            "Popularity: forecast monthly sales x 100. "
+            "Profit: margin cents. "
+            "All objectives share the same replacement need."
+        )
         ctrl_layout.addWidget(self.objective_combo)
 
-        # Allocation Method
         ctrl_layout.addWidget(QLabel("Method:"))
         self.method_combo = QComboBox()
         self.method_combo.addItem("Greedy (Rank Order)", "Greedy")
         self.method_combo.addItem("Bounded Knapsack (Max Score)", "Knapsack")
         ctrl_layout.addWidget(self.method_combo)
 
-        # Outlet Selector
         ctrl_layout.addWidget(QLabel("Outlets:"))
         self.outlet_combo = QComboBox()
         self.outlet_combo.addItem("All Outlets (Shared Budget)", "all")
         ctrl_layout.addWidget(self.outlet_combo)
 
-        # Product Search
-        ctrl_layout.addWidget(QLabel("Product Search:"))
+        ctrl_layout.addWidget(QLabel("As of:"))
+        self.asof_combo = QComboBox()
+        self.asof_combo.addItem("Latest imported month", None)
+        ctrl_layout.addWidget(self.asof_combo)
+
+        ctrl_layout.addWidget(QLabel("Search:"))
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Exact Item ID (BST) or partial text...")
         self.search_edit.setClearButtonEnabled(True)
@@ -172,21 +185,17 @@ class RecommendationsView(QWidget):
 
         layout.addWidget(ctrl_frame)
 
-        # Metrics / Summary Cards Banner
         self.metrics_label = QLabel()
         self.metrics_label.setStyleSheet(
             "background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 12px; font-size: 12px;"
         )
         layout.addWidget(self.metrics_label)
 
-        # Splitter with Chart (top) and Table (bottom)
         splitter = QSplitter(Qt.Orientation.Vertical)
 
-        # Chart Canvas
         self.chart_canvas = MatplotlibCanvas(self, width=8, height=3.5)
         splitter.addWidget(self.chart_canvas)
 
-        # Table View
         table_container = QWidget()
         t_layout = QVBoxLayout(table_container)
         t_layout.setContentsMargins(0, 4, 0, 0)
@@ -203,16 +212,17 @@ class RecommendationsView(QWidget):
 
         layout.addWidget(splitter, stretch=1)
 
-        # Connect signals for immediate updates
         self.budget_spin.valueChanged.connect(self.recalculate_and_display)
         self.method_combo.currentIndexChanged.connect(self.recalculate_and_display)
         self.objective_combo.currentIndexChanged.connect(self.recalculate_and_display)
         self.outlet_combo.currentIndexChanged.connect(self.recalculate_and_display)
+        self.asof_combo.currentIndexChanged.connect(self.recalculate_and_display)
         self.search_edit.textChanged.connect(self.filter_display_only)
 
     def set_master_batches(self, batches: List[BatchRecord]):
         self.master_batches = batches
         self._update_outlets_dropdown()
+        self._update_asof_dropdown()
         self.recalculate_and_display()
 
     def _update_outlets_dropdown(self):
@@ -232,12 +242,28 @@ class RecommendationsView(QWidget):
             self.outlet_combo.setCurrentIndex(0)
         self.outlet_combo.blockSignals(False)
 
+    def _update_asof_dropdown(self):
+        current = self.asof_combo.currentData()
+        self.asof_combo.blockSignals(True)
+        self.asof_combo.clear()
+        self.asof_combo.addItem("Latest imported month", None)
+
+        periods = sorted(list({(b.report_year, b.report_month) for b in self.master_batches}))
+        for y, m in periods:
+            self.asof_combo.addItem(f"{y:04d}-{m:02d}", (y, m))
+
+        idx = -1
+        for i in range(self.asof_combo.count()):
+            if self.asof_combo.itemData(i) == current:
+                idx = i
+                break
+        if idx != -1:
+            self.asof_combo.setCurrentIndex(idx)
+        else:
+            self.asof_combo.setCurrentIndex(0)
+        self.asof_combo.blockSignals(False)
+
     def recalculate_and_display(self):
-        """
-        Recalculates restocking recommendations and budget allocation.
-        Note requirement: "The budget, allocation method, search and outlet filter update results immediately.
-        The search affects the displayed recommendations, not how the selected outlets share the budget."
-        """
         if not self.master_batches:
             self.all_recommendations = []
             self.displayed_recommendations = []
@@ -246,19 +272,18 @@ class RecommendationsView(QWidget):
             self.metrics_label.setText("No data loaded. Please import monthly CSV files.")
             return
 
-        # 1. Determine selected outlets for budget sharing
         outlet_data = self.outlet_combo.currentData()
         selected_outlets = None if outlet_data == "all" else [outlet_data]
+        as_of_ym: Optional[Tuple[int, int]] = self.asof_combo.currentData()
 
-        # 2. Compute recommendations across selected outlets
         self.all_recommendations = calculate_restocking_recommendations(
-            self.master_batches, selected_outlets=selected_outlets,
+            self.master_batches,
+            selected_outlets=selected_outlets,
             objective=self.objective_combo.currentData(),
+            as_of_ym=as_of_ym,
         )
 
-        # 3. Build Balanced BST (AVL Tree) for exact item_id lookup
         self.bst_index.clear()
-        # Group by item_id (a product may be at multiple outlets)
         item_groups: Dict[str, List[ProductRecommendation]] = {}
         for r in self.all_recommendations:
             if r.item_id not in item_groups:
@@ -268,7 +293,6 @@ class RecommendationsView(QWidget):
         for item_id, rec_list in item_groups.items():
             self.bst_index.insert(item_id, rec_list)
 
-        # 4. Allocate Budget across ALL applicable recommendations
         budget = self.budget_spin.value()
         method = self.method_combo.currentData()
 
@@ -279,7 +303,6 @@ class RecommendationsView(QWidget):
             )
         except ValueError as e:
             QMessageBox.warning(self, "Knapsack Budget Limit Exceeded", str(e))
-            # Fallback to greedy
             self.method_combo.blockSignals(True)
             self.method_combo.setCurrentIndex(0)
             self.method_combo.blockSignals(False)
@@ -287,39 +310,27 @@ class RecommendationsView(QWidget):
                 self.all_recommendations, budget=budget, method="Greedy"
             )
 
-        # 5. Filter display based on search
         self.filter_display_only(remaining_budget=remaining_budget)
 
     def filter_display_only(self, remaining_budget: Optional[float] = None):
-        """
-        Filters what is displayed in recommendation chart and table without affecting budget allocation.
-        Uses AVL Tree for exact product ID lookup; linear search for partial matches.
-        """
         query = self.search_edit.text().strip()
 
         if not query:
             self.displayed_recommendations = list(self.all_recommendations)
         else:
-            # Check exact product ID lookup using balanced BST (AVL Tree)
             exact_match = self.bst_index.search(query)
             if exact_match is not None:
-                # Found exact product ID in AVL Tree!
                 self.displayed_recommendations = list(exact_match)
             else:
-                # Partial search uses linear search over item_id, item_name, category
                 q_lower = query.lower()
                 self.displayed_recommendations = [
                     r for r in self.all_recommendations
                     if q_lower in r.item_id.lower() or q_lower in r.item_name.lower() or q_lower in r.category.lower()
                 ]
 
-        # Update Table Model
         self.table_model.set_items(self.displayed_recommendations)
-
-        # Update Chart: "shows need and allocation for the first 20 ranked, displayed products"
         plot_recommendations_chart(self.chart_canvas, self.displayed_recommendations, top_n=20)
 
-        # Update Summary Metrics
         total_budget = self.budget_spin.value()
         total_spent = sum(r.allocated_cost for r in self.all_recommendations)
         rem = total_budget - total_spent if remaining_budget is None else remaining_budget
@@ -338,5 +349,4 @@ class RecommendationsView(QWidget):
         )
 
     def get_all_recommendations(self) -> List[ProductRecommendation]:
-        """Returns all calculated recommendations for export."""
         return self.all_recommendations

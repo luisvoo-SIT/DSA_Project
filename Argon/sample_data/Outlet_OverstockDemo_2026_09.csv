@@ -1,0 +1,6 @@
+item_id,item_name,category,unit_cost,unit_sell,current_total_stock,mth_purchase,lead_time,shelf_life,batch_no,supplier_rating
+WASTE001,Expired stock and optimistic forecast,Overstock demonstration,2.00,3.50,40,10,0,35,0726,4.5
+WASTE001,Expired stock and optimistic forecast,Overstock demonstration,2.00,3.50,10,10,0,35,0926,4.5
+WASTE002,Same sales without expired stock,Overstock demonstration,2.00,3.50,10,10,0,35,0926,4.5
+WASTE003,Expired stock but steady sales,Overstock demonstration,2.00,3.50,40,50,0,35,0726,4.5
+WASTE003,Expired stock but steady sales,Overstock demonstration,2.00,3.50,10,50,0,35,0926,4.5
