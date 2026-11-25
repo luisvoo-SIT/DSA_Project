@@ -93,9 +93,16 @@ def plot_expiry_distribution(canvas: MatplotlibCanvas, df_batches: pd.DataFrame)
     canvas.canvas.draw()
 
 
-def plot_recommendations_chart(canvas: MatplotlibCanvas, recommendations: List[ProductRecommendation], top_n: int = 20) -> None:
+def plot_recommendations_chart(
+    canvas: MatplotlibCanvas,
+    recommendations: List[ProductRecommendation],
+    top_n: int = 20,
+    remaining_budget: float = None,
+    total_budget: float = None,
+) -> None:
     """
-    Plots Need vs Allocated units for the first 20 ranked, displayed products.
+    Plots Need vs Allocated units for the first 20 ranked, displayed products,
+    and displays the remaining budget badge at the bottom right of the chart.
     """
     canvas.figure.clear()
     ax = canvas.figure.add_subplot(111)
@@ -123,8 +130,28 @@ def plot_recommendations_chart(canvas: MatplotlibCanvas, recommendations: List[P
     ax.set_yticklabels(names, fontsize=8)
     ax.set_xlabel("Units", fontsize=10)
     ax.set_title(f"Restocking Need vs Allocated Restock Units (First {len(items)} Displayed Products)", fontsize=11, fontweight="bold", pad=10)
-    ax.legend(loc="lower right", framealpha=0.9)
+    ax.legend(loc="upper right", framealpha=0.9)
     ax.grid(axis="x", linestyle="--", alpha=0.4)
+
+    # Display remaining budget badge on the bottom right of the graph
+    if remaining_budget is not None:
+        if total_budget is not None:
+            spent = max(0.0, total_budget - remaining_budget)
+            badge_text = f"Allocated: ${spent:,.2f} / ${total_budget:,.2f}\nRemaining Budget: ${remaining_budget:,.2f}"
+        else:
+            badge_text = f"Remaining Budget: ${remaining_budget:,.2f}"
+        ax.text(
+            0.985,
+            0.03,
+            badge_text,
+            transform=ax.transAxes,
+            ha="right",
+            va="bottom",
+            fontsize=9,
+            fontweight="bold",
+            color="#1e293b",
+            bbox=dict(boxstyle="round,pad=0.45", facecolor="#f8fafc", edgecolor="#94a3b8", alpha=0.94),
+        )
 
     # Max x limit
     max_val = max(max(needs, default=0), max(allocs, default=0))

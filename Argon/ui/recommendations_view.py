@@ -350,12 +350,18 @@ class RecommendationsView(QWidget):
                     if q_lower in r.item_id.lower() or q_lower in r.item_name.lower() or q_lower in r.category.lower()
                 ]
 
-        self.table_model.set_items(self.displayed_recommendations)
-        plot_recommendations_chart(self.chart_canvas, self.displayed_recommendations, top_n=20)
-
         total_budget = self.budget_spin.value()
         total_spent = sum(r.allocated_cost for r in self.all_recommendations)
         rem = total_budget - total_spent if remaining_budget is None else remaining_budget
+
+        self.table_model.set_items(self.displayed_recommendations)
+        plot_recommendations_chart(
+            self.chart_canvas,
+            self.displayed_recommendations,
+            top_n=20,
+            remaining_budget=rem,
+            total_budget=total_budget,
+        )
         total_units = sum(r.allocated_units for r in self.all_recommendations)
         prods_allocated = sum(1 for r in self.all_recommendations if r.allocated_units > 0)
         total_prods = len(self.all_recommendations)
