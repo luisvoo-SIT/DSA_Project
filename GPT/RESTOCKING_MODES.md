@@ -1,6 +1,6 @@
 # How the restocking modes work
 
-The app estimates how many units each outlet needs, assigns each unit a score based on the chosen objective, and distributes the shared budget with either Greedy or Bounded Knapsack. Profit and Popularity use the same need calculation but different scores.
+The app estimates how many units each outlet needs, assigns each unit a score based on the chosen objective, and distributes the shared budget using Greedy, Bounded Knapsack, or Balanced budget. Profit and Popularity use the same need calculation but different scores.
 
 ## 1. Forecast monthly sales
 
@@ -82,6 +82,44 @@ The app ranks recommendations by **score per unit ÷ unit cost**, highest first,
 
 - **Greedy** buys in ranked order, up to each product's need and the remaining budget. It is fast, but it may not achieve the highest possible total score.
 - **Bounded Knapsack** searches for the combination of whole units that maximizes total score without exceeding the budget or any product's need. It uses integer cents and is limited to budgets of $1,000 or less. For a larger budget, select Greedy; the interface displays an explanatory message.
+- **Balanced budget** progressively buys for the eligible product/outlet with the least allocated spending, using the existing score/cost rank to break ties. This approximates an equal budget split while allowing whole units. Full needs stop receiving funds, and unaffordable items are skipped so remaining money can reach other items. Zero-score and zero-need products are excluded. It uses a min-heap keyed by allocated spending, with batching when one product can catch up to the next spending level. It runs in the background and supports cancellation like the other methods.
+
+### Balanced spending for a wider variety
+
+Select **Popularity** or **Profit** under Objective and **Balanced budget** under Allocation. This changes budget distribution; unit scores and replacement needs remain unchanged. Fairness is measured in dollars spent, not identical quantities. Each outlet/product is a separate request: the same SKU at two selected outlets receives two shares. Whole-unit costs, budget, and needs can prevent equal spending, and a very small budget cannot fund every product. Existing priority rank decides ties. Balanced is not guaranteed to maximize either total score or the number of funded products.
+
+With September's `Outlet_Youth_2026_09.csv` alone (or all three Youth files with **As of = 2026-09**), select that outlet and a **$600** budget:
+
+| Objective | Allocation | Products funded | Spend |
+| --- | --- | ---: | ---: |
+| Popularity | Greedy | 4 of 40 | $599.43 |
+| Popularity | Balanced budget | 40 of 40 | $599.97 |
+| Profit | Greedy | 4 of 40 | $599.50 |
+| Profit | Balanced budget | 40 of 40 | $599.97 |
+
+The summary displays the method and funded-product count. Search still filters display only, and export includes all applicable recommendations with `allocation_method`. Similar balanced allocations across Profit and Popularity are expected because equal spending is the primary aim; the objective influences eligibility and tie-breaking rather than weighting every budget share. Choose Greedy or Knapsack when maximizing the selected score matters more than spreading funds.
+
+### Combine balance with Greedy or Knapsack
+
+Select an objective and Greedy/Knapsack, check **Balance first**, and choose a whole percentage from 0 to 100 (50% initially):
+
+1. Reserve that share of the original budget for balanced allocation.
+2. Lock in the quantities bought in that stage.
+3. Subtract those quantities from each product's remaining need.
+4. Use the chosen Greedy/Knapsack method on all remaining money and needs.
+
+Unspent reserved money is returned to stage two rather than stranded. The original budget is never counted twice, and neither stage may buy beyond the original need. The main scoring formulas are unchanged. Scores influence tie-breaking in the balanced stage and prioritization in the second stage. A low balanced share or small budget may still fail to fund every product; this is not a guarantee of minimum stock for every SKU.
+
+At 0%, this is the original algorithm. At 100%, it gives the same quantities as full Balanced budget. The separate Balanced budget choice disables the checkbox/share controls because it already balances everything. Knapsack's existing $1,000 overall limit still applies to the combined method. Its optimality applies to the remaining budget and needs after fixing the base; it may have a lower total score than an unrestricted knapsack solution in exchange for variety.
+
+For Youth September, Popularity, $600 and 50% balancing:
+
+| Combined method | Balanced stage spend | Priority stage spend | Total | Products funded |
+| --- | ---: | ---: | ---: | ---: |
+| Balance first + Greedy | $299.40 | $300.32 | $599.72 | 40 |
+| Balance first + Knapsack | $299.40 | $300.48 | $599.88 | 40 |
+
+The balanced stage had a $300 ceiling, so its unused $0.60 was available to stage two. The table shows balanced units, priority units and their total; export includes those counts along with the chosen percentage and combined allocation method. Both stages use the background worker and cancellation mechanism, and search remains a display filter.
 
 ## Example
 

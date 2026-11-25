@@ -10,24 +10,25 @@ from PySide6.QtCore import Qt, QObject, QRunnable, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (QApplication,QComboBox,QDoubleSpinBox,QFileDialog,QHBoxLayout,QHeaderView,
     QLabel,QLineEdit,QMainWindow,QMessageBox,QPushButton,QTableWidget,QTableWidgetItem,QTabWidget,
-    QVBoxLayout,QWidget,QSplitter)
-from inventory import FIELDS, OBJECTIVES, Tree, allocate, expiry_queue, linear_search, load_csv, recommendations
+    QVBoxLayout,QWidget,QSplitter,QCheckBox,QSpinBox)
+from inventory import FIELDS, OBJECTIVES, ALLOCATION_METHODS, Tree, allocate, expiry_queue, linear_search, load_csv, recommendations
 
 class AllocationSignals(QObject):
     finished = Signal(int, object, object)
 
 
 class AllocationTask(QRunnable):
-    def __init__(self, generation, rows, budget, method, objective):
+    def __init__(self, generation, rows, budget, method, objective, balance_percent=0):
         super().__init__()
         self.generation, self.rows, self.budget = generation, rows, budget
         self.method, self.objective = method, objective
+        self.balance_percent=balance_percent
         self.cancelled = threading.Event()
         self.signals = AllocationSignals()
 
     def run(self):
         try:
-            result = allocate(recommendations(self.rows, self.objective), self.budget, self.method, cancel=self.cancelled.is_set)
+            result = allocate(recommendations(self.rows, self.objective), self.budget, self.method, cancel=self.cancelled.is_set,balance_percent=self.balance_percent)
             self.signals.finished.emit(self.generation, result, None)
         except Exception as exc:
             self.signals.finished.emit(self.generation, None, str(exc))
@@ -49,8 +50,15 @@ class MainWindow(QMainWindow):
         self.search=QLineEdit(); self.search.setPlaceholderText('Search product name or ID'); self.search.textChanged.connect(self.render); controls.addWidget(self.search)
         self.budget=QDoubleSpinBox(); self.budget.setRange(0,100000000); self.budget.setDecimals(2); self.budget.setValue(100); self.budget.valueChanged.connect(self.recalculate); controls.addWidget(QLabel('Budget:')); controls.addWidget(self.budget)
         self.objective=QComboBox(); self.objective.addItems(OBJECTIVES); self.objective.setToolTip('Availability + margin: 100 plus margin cents. Profit: margin cents. Popularity: forecast monthly sales x 100. The same restock quantities are used for every objective.'); self.objective.currentTextChanged.connect(self.recalculate); controls.addWidget(QLabel('Objective:')); controls.addWidget(self.objective)
-        self.method=QComboBox(); self.method.addItems(['Greedy','Knapsack']); self.method.currentTextChanged.connect(self.recalculate); controls.addWidget(self.method)
+        self.method=QComboBox(); self.method.addItems(ALLOCATION_METHODS); self.method.currentTextChanged.connect(self.recalculate); controls.addWidget(QLabel('Allocation:')); controls.addWidget(self.method)
         self.asof=QComboBox(); self.asof.addItem('Latest imported month',None); self.asof.currentIndexChanged.connect(self.render); controls.addWidget(QLabel('As of:')); controls.addWidget(self.asof)
+        balance_controls=QHBoxLayout(); layout.addLayout(balance_controls)
+        self.balance_first=QCheckBox('Balance first')
+        self.balance_first.setToolTip('Fund a varied base first, then allocate the remaining money with Greedy or Knapsack.')
+        self.balance_share=QSpinBox(); self.balance_share.setRange(0,100); self.balance_share.setValue(50); self.balance_share.setSuffix('%'); self.balance_share.setEnabled(False)
+        self.balance_first.toggled.connect(self.recalculate); self.balance_share.valueChanged.connect(self.recalculate)
+        balance_controls.addWidget(self.balance_first); balance_controls.addWidget(QLabel('Budget share for balanced base:')); balance_controls.addWidget(self.balance_share); balance_controls.addStretch()
+        self.allocation_hint=QLabel(); self.allocation_hint.setWordWrap(True); layout.addWidget(self.allocation_hint)
         self.tabs=QTabWidget(); layout.addWidget(self.tabs)
         inventory_page=QWidget(); inventory_layout=QVBoxLayout(inventory_page)
         filters=QHBoxLayout(); inventory_layout.addLayout(filters)
@@ -175,6 +183,16 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self,'Invalid edit',str(e)); self.render()
     def recalculate(self,*_):
         if not hasattr(self,'results'):return
+        standalone=self.method.currentText()=='Balanced budget'
+        self.balance_first.setEnabled(not standalone)
+        self.balance_share.setEnabled(not standalone and self.balance_first.isChecked())
+        if standalone:
+            hint='Balanced budget: similar spending per product/outlet with remaining need. Scores break ties; prices prevent exact equality.'
+        elif self.balance_first.isChecked():
+            hint=f"Stage 1: balance {self.balance_share.value()}% of the budget. Stage 2: {self.method.currentText()} allocates all unspent money without undoing the balanced base."
+        else:
+            hint='Greedy buys in score/cost rank order. Knapsack maximizes the selected total score. Enable Balance first to reserve a varied base.'
+        self.allocation_hint.setText(hint)
         # Coalesce edits, and invalidate both pending results and exports immediately.
         self._generation += 1
         if self._allocation_task is not None: self._allocation_task.cancelled.set()
@@ -195,7 +213,8 @@ class MainWindow(QMainWindow):
         if self._allocation_task is not None:return
         records=self.records_asof()
         rows=records if self.location.currentText()=='All outlets' else [r for r in records if r.location==self.location.currentText()]
-        task=AllocationTask(self._generation, list(rows), self.budget.value(), self.method.currentText(), self.objective.currentText())
+        balance_percent=self.balance_share.value() if self.balance_first.isEnabled() and self.balance_first.isChecked() else 0
+        task=AllocationTask(self._generation, list(rows), self.budget.value(), self.method.currentText(), self.objective.currentText(),balance_percent)
         self._allocation_task=task
         task.signals.finished.connect(self._allocation_finished)
         QThreadPool.globalInstance().start(task)
@@ -214,14 +233,19 @@ class MainWindow(QMainWindow):
             self.draw_recommendations(shown)
             self.set_table(self.results,
                 ['Outlet','ID','Product','Report','Sold this month','Expired this month','Replace expired (75%)',
-                 'Available stock','New total target','Need','Buy','Stock after removal + allocation',
+                 'Available stock','New total target','Need','Balanced units','Priority units','Buy','Stock after removal + allocation',
                  'Forecast/month','Unit cost','Unit margin','Priority score','Spend','Expiry data','Review'],
                 [[r['location'],r['item_id'],r['name'],r['period'].strftime('%Y-%m'),
                   r['latest_sales'],r['expired_this_month'],r['expired_replacement'],r['usable'],r['stock_target'],
-                  r['need'],r['qty'],r['usable']+r['qty'],f"{r['forecast']:.1f}",r['cost'],r['margin'],r['value'],
+                  r['need'],r['balanced_units'],r['priority_units'],r['qty'],r['usable']+r['qty'],f"{r['forecast']:.1f}",r['cost'],r['margin'],r['value'],
                   f"{r['qty']*r['cost']:.2f}",r['loss_source'],r['review']] for r in shown])
             spend=sum(r['qty']*r['cost'] for r in data)
-            self.summary.setText(f"Objective: {self.objective.currentText()} · {len(data)} outlet/products · Allocated: {spend:.2f} of {self.budget.value():.2f}. Need = sold + 75% of this month's expired units (rounded down). Use 'As of' to compare months. Search only filters the display.")
+            funded=sum(r['qty']>0 for r in data)
+            eligible=sum(r['need']>0 and r['value']>0 for r in data)
+            stage_one=sum(r['balanced_units']*r['cost'] for r in data)
+            stage_two=sum(r['priority_units']*r['cost'] for r in data)
+            method_label=data[0]['allocation_method'] if data else self.method.currentText()
+            self.summary.setText(f"{self.objective.currentText()} · {method_label} · Products funded: {funded}/{eligible} eligible · Allocated: {spend:.2f} of {self.budget.value():.2f}. Balanced spend: {stage_one:.2f}; priority spend: {stage_two:.2f}. Search only filters the display.")
         except ValueError as e:
             self.all_results=[]; self.results.setRowCount(0); self.draw_recommendations([]); self.summary.setText(str(e))
     def save_csv(self):

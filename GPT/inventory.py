@@ -123,6 +123,7 @@ def forecast(observations):
 
 EXPIRED_REPLACEMENT_PERCENT = 75
 OBJECTIVES = ('Availability + margin', 'Popularity', 'Profit')
+ALLOCATION_METHODS = ('Greedy', 'Knapsack', 'Balanced budget')
 
 
 def monthly_expired_units(current):
@@ -194,17 +195,74 @@ class AllocationCancelled(Exception):
     """A newer UI request has replaced this calculation."""
 
 
-def allocate(items, budget, method, cancel=None):
+def allocate_balanced(items, cents, cancel=None):
+    """Progressively fund the least-funded outlet/product first.
+
+    Fairness is measured by money spent, not equal unit counts. Existing
+    score/cost rank breaks ties. Whole-unit prices may overshoot a spending
+    level, and unmet need receives leftover money when another item is full.
+    """
+    heap=[(0,index) for index,r in enumerate(items) if r['need']>0 and r['value']>0]
+    heapq.heapify(heap)
+    while heap and cents>0:
+        if cancel and cancel(): raise AllocationCancelled()
+        spent,index=heapq.heappop(heap)
+        item=items[index]
+        price=int(item['cost']*100)
+        if price>cents:
+            continue  # Remaining budget can only shrink; this item cannot fit.
+        if heap:
+            gap=max(0,heap[0][0]-spent)
+            catch_up=max(1,(gap+price-1)//price)
+        else:
+            catch_up=cents//price
+        count=min(item['need']-item['qty'],cents//price,catch_up)
+        item['qty']+=count
+        cents-=count*price
+        spent+=count*price
+        if item['qty']<item['need']:
+            heapq.heappush(heap,(spent,index))
+    return items
+
+
+def allocate(items, budget, method, cancel=None, balance_percent=0):
+    if method not in ALLOCATION_METHODS: raise ValueError(f'Unknown allocation method: {method}')
+    if not isinstance(balance_percent,int) or not 0<=balance_percent<=100:
+        raise ValueError('Balanced share must be a whole percentage from 0 to 100')
+    if method=='Balanced budget' and balance_percent:
+        raise ValueError('Balance first is used with Greedy or Knapsack; Balanced budget already balances the full budget')
     cents=int((Decimal(str(budget))*100).to_integral_value(rounding=ROUND_HALF_UP))
     if cents<0: raise ValueError('Budget must be non-negative')
-    items=[dict(r,qty=0) for r in items]
+    if method=='Knapsack' and cents>100000:
+        raise ValueError('Knapsack is limited to a budget of 1,000.00 to keep the desktop application responsive. Use Greedy for larger budgets.')
+    items=[dict(r,qty=0,allocation_method=method,balance_percent=0,balanced_units=0,priority_units=0) for r in items]
+    if balance_percent:
+        # Lock in a balanced base, then optimize only remaining need and money.
+        # Unspent money from the first stage remains available in stage two.
+        allocate_balanced(items,cents*balance_percent//100,cancel)
+        remaining_cents=cents-sum(r['qty']*int(r['cost']*100) for r in items)
+        remaining_items=[dict(r,need=r['need']-r['qty']) for r in items]
+        extra=allocate(remaining_items,Decimal(remaining_cents)/100,method,cancel=cancel)
+        for base,added in zip(items,extra):
+            base['balanced_units']=base['qty']
+            base['priority_units']=added['qty']
+            base['qty']+=added['qty']
+            base['balance_percent']=balance_percent
+            base['allocation_method']=f'Balanced first + {method}'
+        return items
+    if method=='Balanced budget':
+        allocate_balanced(items,cents,cancel)
+        for r in items:
+            r['balanced_units']=r['qty']
+            r['balance_percent']=100
+        return items
     if method=='Greedy':
         for r in items:
             if cancel and cancel(): raise AllocationCancelled()
             if r['value']<=0: continue
             price=int(r['cost']*100); r['qty']=min(r['need'],cents//price); cents-=r['qty']*price
+            r['priority_units']=r['qty']
         return items
-    if cents>100000: raise ValueError('Knapsack is limited to a budget of 1,000.00 to keep the desktop application responsive. Use Greedy for larger budgets.')
     # Bounded knapsack, binary-decomposed bundles; sparse Pareto frontier with immutable paths.
     states={0:(0,None)}
     for index,r in enumerate(items):
@@ -224,6 +282,7 @@ def allocate(items, budget, method, cancel=None):
     _,path=max(states.values(), key=lambda p:p[0])
     while path:
         index,count,path=path; items[index]['qty']+=count
+    for r in items:r['priority_units']=r['qty']
     return items
 
 def expiry_queue(rows):

@@ -40,6 +40,22 @@ Each row is a product batch. `batch_no` is four-character MMYY text and is prese
 
 The application does not authenticate users, send purchase orders, or track shipments. Recommendations are decision support and do not update inventory automatically.
 
+## Balanced budget for more variety
+
+Choose **Profit** or **Popularity** under Objective, then **Balanced budget** under Allocation. This progressively funds the least-funded product/outlet by spend, using score/cost rank to break ties. Money is redistributed when needs are met or an item is unaffordable. The method respects the total budget and each product's need; zero-score products are excluded.
+
+Equal spending does not mean equal unit counts, and whole-unit prices prevent an exact split. Each outlet/product is a separate request. Balanced favours spreading money rather than maximizing total score, so the two objectives can produce similar balanced allocations. It is a separate method alongside Greedy and Knapsack; those algorithms retain their existing behaviour. The summary shows how many eligible products were funded, and exports include `allocation_method`.
+
+For a demo, import the Youth files, choose **As of = 2026-09**, select Outlet Youth, and enter a $600 budget. In either Profit or Popularity, Greedy funds 4 products while Balanced budget funds all 40. See the scoring guide for exact spending figures and limitations.
+
+## Balance first, then use Greedy or Knapsack
+
+Select Greedy or Knapsack, enable **Balance first**, and choose the **Budget share for balanced base** (50% initially). Stage one balances that share across eligible outlet/products. Stage two uses the selected algorithm to allocate all unspent money to remaining need, including money that stage one could not spend on whole units. The balanced purchases are locked in; quantities cannot exceed the original need.
+
+More budget for the balanced base generally favours variety; less leaves more money for score-based prioritization. At 0%, the allocation is the original Greedy/Knapsack method. At 100%, it behaves like Balanced budget. The separate Balanced budget method still balances the entire budget and disables the extra controls. Knapsack retains its $1,000 overall budget limit. Hybrid knapsack optimizes the remaining problem, not the entire original budget after rearranging the balanced purchases.
+
+The table and export separate **Balanced units** from **Priority units** and record `balance_percent` and `allocation_method`. The summary shows actual spending in each stage. With Youth September, Popularity and $600, a 50% base funds all 40 products: stage one spends $299.40; Greedy adds $300.32, or Knapsack adds $300.48.
+
 ## Test
 
 ```powershell
