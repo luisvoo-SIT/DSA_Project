@@ -323,8 +323,17 @@ class ProcessDiagramWindow(QWidget):
         self.method_combo = QComboBox()
         self.method_combo.addItem("Greedy (Rank Order)", "Greedy")
         self.method_combo.addItem("Bounded Knapsack (DP)", "Knapsack")
-        self.method_combo.addItem("Even Distribution (Variety)", "Even")
+        self.method_combo.addItem("Balanced Budget (Even Distribution)", "Even")
         r5.addWidget(self.method_combo)
+
+        r5.addWidget(QLabel("Balanced Base (%):"))
+        self.base_share_spin = QDoubleSpinBox()
+        self.base_share_spin.setRange(0.0, 100.0)
+        self.base_share_spin.setValue(25.0)
+        self.base_share_spin.setDecimals(0)
+        self.base_share_spin.setSingleStep(5.0)
+        self.base_share_spin.setSuffix(" %")
+        r5.addWidget(self.base_share_spin)
         in_layout.addLayout(r5)
 
         layout.addWidget(input_frame)
@@ -347,6 +356,7 @@ class ProcessDiagramWindow(QWidget):
         self.stock_spin.valueChanged.connect(self._recalculate_illustration)
         self.budget_spin.valueChanged.connect(self._recalculate_illustration)
         self.method_combo.currentIndexChanged.connect(self._recalculate_illustration)
+        self.base_share_spin.valueChanged.connect(self._recalculate_illustration)
 
         return panel
 
@@ -361,6 +371,9 @@ class ProcessDiagramWindow(QWidget):
         usable_stock = self.stock_spin.value()
         budget = self.budget_spin.value()
         method = self.method_combo.currentText()
+        base_share = 100.0 if self.method_combo.currentData() == 'Even' else self.base_share_spin.value()
+        base_budget = round(budget * (base_share / 100.0), 2)
+        opt_budget = round(budget - base_budget, 2)
 
         # Step 1: Demand Forecast (used for Popularity objective)
         history = [(2026, 5, float(p1)), (2026, 6, float(sold))]
@@ -411,8 +424,8 @@ LIVE DECISION MODEL STEP-BY-STEP BREAKDOWN
    - Popularity score: {forecast_monthly:.2f} x 100 = {popularity_value} points/unit
    Unit Cost: ${cost:.2f} -> Value/Cost Ratio: {val_per_cost:.2f} pts/$
 
-4. SINGLE-PRODUCT BUDGET SIMULATION ({method}):
-   Available Restocking Budget: ${budget:.2f}
+4. SINGLE-PRODUCT BUDGET SIMULATION ({method}, Balanced Base: {base_share:.0f}%):
+   Total Restocking Budget: ${budget:.2f} (Balanced Base: ${base_budget:.2f} | Optimization Remainder: ${opt_budget:.2f})
    Indicative Need: {need_units} units @ ${cost:.2f}
    Max Affordable Quantity: floor(${budget:.2f} / ${cost:.2f}) = {can_afford} units
    -> Affordable Recommendation: {allocated_units} units

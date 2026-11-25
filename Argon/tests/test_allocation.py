@@ -147,5 +147,33 @@ class TestBudgetAllocation(unittest.TestCase):
         self.assertEqual(rem, 0.50)
 
 
+
+    def test_integrated_balanced_base_in_greedy_and_knapsack(self):
+        # 3 products: p2 ($1.50, need 40, rank 1), p1 ($2.00, need 50, rank 2), p3 ($5.00, need 20, rank 3)
+        # Budget = $120.00:
+        # With balanced_share = 0%, Greedy spends $60 on p2 (40 units) + $60 on p1 (30 units), giving p3 0 units.
+        # With balanced_share = 50% ($60.00 Balanced Base + $60.00 Greedy/Knapsack remainder):
+        # - Stage 1 ($60.00 Balanced Base) gives p2 13 units ($19.50), p1 10 units ($20.00), p3 4 units ($20.00), leaving $60.50.
+        # - Stage 2 ($60.50 Optimization) allocates remaining budget across unmet needs, so all 3 products are funded!
+        for method in ("Greedy", "Knapsack"):
+            items_zero_base = [
+                ProductRecommendation(**{**self.p2.__dict__}),
+                ProductRecommendation(**{**self.p1.__dict__}),
+                ProductRecommendation(**{**self.p3.__dict__}),
+            ]
+            items_half_base = [
+                ProductRecommendation(**{**self.p2.__dict__}),
+                ProductRecommendation(**{**self.p1.__dict__}),
+                ProductRecommendation(**{**self.p3.__dict__}),
+            ]
+            allocate_budget(items_zero_base, 120.0, method=method, balanced_share=0.0)
+            allocate_budget(items_half_base, 120.0, method=method, balanced_share=50.0)
+
+            self.assertEqual(items_zero_base[2].allocated_units, 0)
+            self.assertGreaterEqual(items_half_base[2].allocated_units, 4)
+            self.assertTrue(all(r.allocated_units > 0 for r in items_half_base))
+            self.assertLessEqual(sum(r.allocated_cost for r in items_half_base), 120.0)
+
+
 if __name__ == "__main__":
     unittest.main()

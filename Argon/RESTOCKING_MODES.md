@@ -82,7 +82,8 @@ The app ranks recommendations by **score per unit ÷ unit cost**, highest first,
 
 - **Greedy** buys in ranked order, up to each product's need and the remaining budget. It is fast, but it may not achieve the highest possible total score.
 - **Bounded Knapsack** searches for the combination of whole units that maximizes total score without exceeding the budget or any product's need. It uses integer cents and is limited to budgets of $1,000 or less. For a larger budget, select Greedy or Even Distribution; the interface displays an explanatory message.
-- **Even Distribution (Variety)** divides the budget into equal dollar shares across all eligible products (water-filling up to each item's need), then distributes any leftover budget one unit at a time in rank order (round-robin) so a broad variety of items is restocked.
+- **Balanced Budget (Even Distribution)** divides the budget into equal dollar shares across all eligible products (water-filling up to each item's need), then distributes any leftover budget one unit at a time in rank order (round-robin) so a broad variety of items is restocked.
+- **Integrated Balanced Base (%) in Greedy and Bounded Knapsack**: Use the **Balanced Base (%)** control ($0\%$–$100\%$, default $25\%$) to reserve a portion of the budget for even distribution across all eligible products first; Greedy or Bounded Knapsack then allocates the remaining budget (plus any unspent base change) across each product's remaining unmet need.
 
 ## Example
 

@@ -127,5 +127,28 @@ class TestUI(unittest.TestCase):
         self.assertLessEqual(sum(r.allocated_cost for r in view.all_recommendations), 100.0)
 
 
+
+    def test_balanced_base_share_spinbox_changes_variety_in_greedy_and_knapsack(self):
+        from core.csv_importer import import_monthly_csv
+        sample_dir = os.path.join(os.path.dirname(__file__), "..", "sample_data")
+        batches = []
+        for month in (9, 10, 11):
+            batches.extend(import_monthly_csv(os.path.join(sample_dir, f"Outlet_Youth_2026_{month:02d}.csv"))[3])
+        view = self.window.recs_view
+        view.budget_spin.setValue(100.0)
+        view.set_master_batches(batches)
+
+        for method_key in ("Greedy", "Knapsack"):
+            view.method_combo.setCurrentIndex(view.method_combo.findData(method_key))
+            view.base_share_spin.setValue(0.0)
+            funded_at_zero = sum(1 for r in view.all_recommendations if r.allocated_units > 0)
+
+            view.base_share_spin.setValue(50.0)
+            funded_at_fifty = sum(1 for r in view.all_recommendations if r.allocated_units > 0)
+
+            self.assertGreater(funded_at_fifty, funded_at_zero)
+            self.assertIn("Balanced Base:</b> 50%", view.metrics_label.text())
+
+
 if __name__ == "__main__":
     unittest.main()

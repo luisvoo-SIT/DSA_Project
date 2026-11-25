@@ -165,8 +165,21 @@ class RecommendationsView(QWidget):
         self.method_combo = QComboBox()
         self.method_combo.addItem("Greedy (Rank Order)", "Greedy")
         self.method_combo.addItem("Bounded Knapsack (Max Score)", "Knapsack")
-        self.method_combo.addItem("Even Distribution (Variety)", "Even")
+        self.method_combo.addItem("Balanced Budget (Even Distribution)", "Even")
         ctrl_layout.addWidget(self.method_combo)
+
+        ctrl_layout.addWidget(QLabel("Balanced Base (%):"))
+        self.base_share_spin = QDoubleSpinBox()
+        self.base_share_spin.setRange(0.0, 100.0)
+        self.base_share_spin.setValue(25.0)
+        self.base_share_spin.setDecimals(0)
+        self.base_share_spin.setSingleStep(5.0)
+        self.base_share_spin.setSuffix(" %")
+        self.base_share_spin.setToolTip(
+            "Share of the total budget distributed evenly across items first (Balanced Base) "
+            "before Greedy or Bounded Knapsack allocates the remaining budget."
+        )
+        ctrl_layout.addWidget(self.base_share_spin)
 
         ctrl_layout.addWidget(QLabel("Outlets:"))
         self.outlet_combo = QComboBox()
@@ -214,11 +227,17 @@ class RecommendationsView(QWidget):
         layout.addWidget(splitter, stretch=1)
 
         self.budget_spin.valueChanged.connect(self.recalculate_and_display)
-        self.method_combo.currentIndexChanged.connect(self.recalculate_and_display)
+        self.method_combo.currentIndexChanged.connect(self._on_method_or_base_changed)
+        self.base_share_spin.valueChanged.connect(self.recalculate_and_display)
         self.objective_combo.currentIndexChanged.connect(self.recalculate_and_display)
         self.outlet_combo.currentIndexChanged.connect(self.recalculate_and_display)
         self.asof_combo.currentIndexChanged.connect(self.recalculate_and_display)
         self.search_edit.textChanged.connect(self.filter_display_only)
+
+    def _on_method_or_base_changed(self):
+        is_pure_even = self.method_combo.currentData() == "Even"
+        self.base_share_spin.setEnabled(not is_pure_even)
+        self.recalculate_and_display()
 
     def set_master_batches(self, batches: List[BatchRecord]):
         self.master_batches = batches
@@ -296,19 +315,21 @@ class RecommendationsView(QWidget):
 
         budget = self.budget_spin.value()
         method = self.method_combo.currentData()
+        base_share = 100.0 if method == "Even" else self.base_share_spin.value()
 
         remaining_budget = budget
         try:
             self.all_recommendations, remaining_budget = allocate_budget(
-                self.all_recommendations, budget=budget, method=method
+                self.all_recommendations, budget=budget, method=method, balanced_share=base_share
             )
         except ValueError as e:
             QMessageBox.warning(self, "Knapsack Budget Limit Exceeded", str(e))
             self.method_combo.blockSignals(True)
             self.method_combo.setCurrentIndex(0)
             self.method_combo.blockSignals(False)
+            self.base_share_spin.setEnabled(True)
             self.all_recommendations, remaining_budget = allocate_budget(
-                self.all_recommendations, budget=budget, method="Greedy"
+                self.all_recommendations, budget=budget, method="Greedy", balanced_share=self.base_share_spin.value()
             )
 
         self.filter_display_only(remaining_budget=remaining_budget)
@@ -339,8 +360,10 @@ class RecommendationsView(QWidget):
         prods_allocated = sum(1 for r in self.all_recommendations if r.allocated_units > 0)
         total_prods = len(self.all_recommendations)
 
+        eff_base = 100.0 if self.method_combo.currentData() == "Even" else self.base_share_spin.value()
         self.metrics_label.setText(
             f"<b>Objective:</b> {self.objective_combo.currentText()} &nbsp;&nbsp;|&nbsp;&nbsp; "
+            f"<b>Balanced Base:</b> {eff_base:.0f}% &nbsp;&nbsp;|&nbsp;&nbsp; "
             f"<b>Budget:</b> ${total_budget:,.2f} &nbsp;&nbsp;|&nbsp;&nbsp; "
             f"<b>Allocated Spend:</b> ${total_spent:,.2f} &nbsp;&nbsp;|&nbsp;&nbsp; "
             f"<b>Remaining:</b> ${rem:,.2f} &nbsp;&nbsp;|&nbsp;&nbsp; "

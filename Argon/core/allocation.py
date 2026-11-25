@@ -1,5 +1,8 @@
 """
-Restocking budget allocation algorithms: Greedy, Bounded Knapsack, and Even Distribution (Variety).
+Restocking budget allocation algorithms:
+- Balanced Budget / Even Distribution (allocate_even)
+- Greedy with integrated Balanced Base (allocate_greedy)
+- Bounded Knapsack DP with integrated Balanced Base (allocate_knapsack)
 """
 import math
 from typing import Callable, List, Optional, Tuple
@@ -11,78 +14,34 @@ class AllocationCancelled(Exception):
     """Raised when an in-progress allocation is superseded by a newer request."""
 
 
-def allocate_greedy(
-    recommendations: List[ProductRecommendation],
-    budget: float,
-    cancel: Optional[Callable[[], bool]] = None,
-) -> Tuple[List[ProductRecommendation], float]:
-    """
-    Greedy allocation: buys in rank order (highest value-per-cost first).
-    Returns (updated_recommendations, remaining_budget).
-    """
-    remaining_budget = max(0.0, float(budget))
-
-    for prod in recommendations:
-        if cancel is not None and cancel():
-            raise AllocationCancelled()
-
-        if prod.need <= 0 or prod.priority_value <= 0:
-            prod.allocated_units = 0
-            prod.projected_stock = int(round(prod.usable_stock))
-            prod.allocated_cost = 0.0
-            continue
-
-        if prod.unit_cost <= 0.0:
-            prod.allocated_units = prod.need
-            prod.projected_stock = int(round(prod.usable_stock)) + prod.need
-            prod.allocated_cost = 0.0
-            continue
-
-        max_affordable = int(math.floor(remaining_budget / prod.unit_cost))
-        allocated = min(prod.need, max_affordable)
-        cost = round(allocated * prod.unit_cost, 2)
-
-        if cost > remaining_budget:
-            allocated = max(0, int(math.floor(remaining_budget / prod.unit_cost)))
-            cost = round(allocated * prod.unit_cost, 2)
-
-        prod.allocated_units = allocated
-        prod.projected_stock = int(round(prod.usable_stock)) + allocated
-        prod.allocated_cost = cost
-        remaining_budget = round(max(0.0, remaining_budget - cost), 2)
-
-    return recommendations, remaining_budget
+def _normalize_share(balanced_share: float) -> float:
+    return max(0.0, min(100.0, float(balanced_share)))
 
 
 def allocate_even(
     recommendations: List[ProductRecommendation],
     budget: float,
     cancel: Optional[Callable[[], bool]] = None,
+    reset: bool = True,
 ) -> Tuple[List[ProductRecommendation], float]:
     """
-    Even Distribution (Variety) allocation:
-    Distributes the shared budget evenly across eligible products to restock
-    a wide variety of items rather than concentrating spend on a few top items.
+    Balanced Budget / Even Distribution (Variety) allocation:
+    Distributes the budget evenly across eligible products to restock a wide
+    variety of items rather than concentrating spend on a few top items.
 
-    Algorithm:
-    1. Reset allocations; free items with positive score receive full need.
-    2. Equal-Share Water-Filling Pass: while the equal dollar share across
-       active products (rem_budget // num_active) can buy at least 1 unit
-       of some active product, allocate up to floor(equal_share / unit_cost)
-       units per product (capped at each product's remaining need).
-    3. Round-Robin Remainder Pass: distribute any remaining budget 1 unit at
-       a time in rank order across active products that still have unmet need
-       and unit_cost <= remaining_budget.
+    When reset=True, initializes allocated_units=0 before allocating.
+    When reset=False, adds onto any existing allocated_units up to each product's need.
     """
     if budget < 0:
         budget = 0.0
 
     rem_cents = int(round(budget * 100))
 
-    for prod in recommendations:
-        prod.allocated_units = 0
-        prod.projected_stock = int(round(prod.usable_stock))
-        prod.allocated_cost = 0.0
+    if reset:
+        for prod in recommendations:
+            prod.allocated_units = 0
+            prod.projected_stock = int(round(prod.usable_stock))
+            prod.allocated_cost = 0.0
 
     active_indices: List[int] = []
     unit_costs_cents: List[int] = [0] * len(recommendations)
@@ -102,14 +61,14 @@ def allocate_even(
             prod.allocated_cost = 0.0
             continue
 
-        active_indices.append(idx)
+        if prod.allocated_units < prod.need:
+            active_indices.append(idx)
 
     # Phase 1: Equal-dollar water-filling across active products
     while active_indices and rem_cents > 0:
         if cancel is not None and cancel():
             raise AllocationCancelled()
 
-        # Keep only products that still need units and can afford at least 1 unit
         active_indices = [
             idx for idx in active_indices
             if recommendations[idx].allocated_units < recommendations[idx].need
@@ -137,8 +96,6 @@ def allocate_even(
                 rem_cents -= qty * c_cents
                 bought_in_pass += qty
 
-        # If equal_share_cents is smaller than every active product's unit cost,
-        # exit Phase 1 and switch to Phase 2 (Round-Robin 1 unit at a time).
         if bought_in_pass == 0:
             break
 
@@ -164,13 +121,78 @@ def allocate_even(
             break
         active_indices = next_active
 
-    total_spent = 0.0
     for prod in recommendations:
         prod.projected_stock = int(round(prod.usable_stock)) + prod.allocated_units
         prod.allocated_cost = round(prod.allocated_units * prod.unit_cost, 2)
-        total_spent += prod.allocated_cost
 
-    remaining_budget = round(max(0.0, budget - total_spent), 2)
+    remaining_budget = round(max(0.0, rem_cents / 100.0), 2)
+    return recommendations, remaining_budget
+
+
+def allocate_greedy(
+    recommendations: List[ProductRecommendation],
+    budget: float,
+    cancel: Optional[Callable[[], bool]] = None,
+    balanced_share: float = 0.0,
+) -> Tuple[List[ProductRecommendation], float]:
+    """
+    Greedy allocation with optional integrated Balanced Base share (0-100%):
+    1. If balanced_share > 0, first distributes budget * (balanced_share / 100)
+       evenly across eligible products using allocate_even().
+    2. Then allocates the remaining budget in rank order (highest value-per-cost first)
+       across each product's remaining unfulfilled need.
+    """
+    total_budget = max(0.0, float(budget))
+    share_pct = _normalize_share(balanced_share)
+
+    if share_pct >= 100.0:
+        return allocate_even(recommendations, total_budget, cancel=cancel, reset=True)
+
+    if share_pct > 0.0:
+        base_budget = round(total_budget * (share_pct / 100.0), 2)
+        allocate_even(recommendations, base_budget, cancel=cancel, reset=True)
+        base_spent = round(sum(p.allocated_cost for p in recommendations), 2)
+        remaining_budget = round(max(0.0, total_budget - base_spent), 2)
+    else:
+        for prod in recommendations:
+            prod.allocated_units = 0
+            prod.projected_stock = int(round(prod.usable_stock))
+            prod.allocated_cost = 0.0
+        remaining_budget = total_budget
+
+    # Stage 2: Greedy pass over remaining unfulfilled need
+    for prod in recommendations:
+        if cancel is not None and cancel():
+            raise AllocationCancelled()
+
+        if prod.need <= 0 or prod.priority_value <= 0:
+            continue
+
+        rem_need = prod.need - prod.allocated_units
+        if rem_need <= 0:
+            continue
+
+        if prod.unit_cost <= 0.0:
+            prod.allocated_units = prod.need
+            prod.projected_stock = int(round(prod.usable_stock)) + prod.need
+            prod.allocated_cost = 0.0
+            continue
+
+        max_affordable = int(math.floor(remaining_budget / prod.unit_cost))
+        add_units = min(rem_need, max_affordable)
+        add_cost = round(add_units * prod.unit_cost, 2)
+
+        if add_cost > remaining_budget:
+            add_units = max(0, int(math.floor(remaining_budget / prod.unit_cost)))
+            add_cost = round(add_units * prod.unit_cost, 2)
+
+        prod.allocated_units += add_units
+        prod.projected_stock = int(round(prod.usable_stock)) + prod.allocated_units
+        prod.allocated_cost = round(prod.allocated_units * prod.unit_cost, 2)
+        remaining_budget = round(max(0.0, remaining_budget - add_cost), 2)
+
+    total_spent = round(sum(p.allocated_cost for p in recommendations), 2)
+    remaining_budget = round(max(0.0, total_budget - total_spent), 2)
     return recommendations, remaining_budget
 
 
@@ -178,14 +200,16 @@ def allocate_knapsack(
     recommendations: List[ProductRecommendation],
     budget: float,
     cancel: Optional[Callable[[], bool]] = None,
+    balanced_share: float = 0.0,
 ) -> Tuple[List[ProductRecommendation], float]:
     """
-    Bounded knapsack allocation:
-    Maximizes additive priority score using integer cents and unit quantities,
-    subject to each product's need and the budget.
+    Bounded knapsack allocation with optional integrated Balanced Base share (0-100%):
+    1. If balanced_share > 0, first distributes budget * (balanced_share / 100)
+       evenly across eligible products using allocate_even().
+    2. Then solves Bounded Knapsack DP in integer cents over the remaining budget
+       and each product's remaining unfulfilled need.
 
     Limited to budgets up to 1,000.00 for responsiveness.
-    Returns (updated_recommendations, remaining_budget).
     """
     if budget < 0:
         budget = 0.0
@@ -193,15 +217,28 @@ def allocate_knapsack(
     if budget > 1000.00:
         raise ValueError(
             f"Budget (${budget:,.2f}) exceeds $1,000.00 limit for Bounded Knapsack. "
-            "Please use Greedy or Even Distribution for larger budgets."
+            "Please use Greedy or Balanced Budget for larger budgets."
         )
 
-    W = int(round(budget * 100))
+    total_budget = float(budget)
+    share_pct = _normalize_share(balanced_share)
 
-    for prod in recommendations:
-        prod.allocated_units = 0
-        prod.projected_stock = int(round(prod.usable_stock))
-        prod.allocated_cost = 0.0
+    if share_pct >= 100.0:
+        return allocate_even(recommendations, total_budget, cancel=cancel, reset=True)
+
+    if share_pct > 0.0:
+        base_budget = round(total_budget * (share_pct / 100.0), 2)
+        allocate_even(recommendations, base_budget, cancel=cancel, reset=True)
+        base_spent_cents = sum(int(round(p.allocated_units * round(p.unit_cost * 100))) for p in recommendations)
+    else:
+        for prod in recommendations:
+            prod.allocated_units = 0
+            prod.projected_stock = int(round(prod.usable_stock))
+            prod.allocated_cost = 0.0
+        base_spent_cents = 0
+
+    total_W = int(round(total_budget * 100))
+    W = max(0, total_W - base_spent_cents)
 
     paid_items: List[Tuple[int, int, int, int]] = []
 
@@ -224,7 +261,8 @@ def allocate_knapsack(
             prod.allocated_cost = 0.0
             continue
 
-        remaining_qty = min(prod.need, W // unit_cents)
+        rem_need = max(0, prod.need - prod.allocated_units)
+        remaining_qty = min(rem_need, W // unit_cents)
         power = 1
         while remaining_qty > 0:
             piece = min(power, remaining_qty)
@@ -234,32 +272,30 @@ def allocate_knapsack(
             remaining_qty -= piece
             power *= 2
 
-    if not paid_items or W <= 0:
-        return recommendations, round(budget, 2)
+    if paid_items and W > 0:
+        num_items = len(paid_items)
+        dp = np.zeros(W + 1, dtype=np.int64)
+        took = np.zeros((num_items, W + 1), dtype=np.uint8)
 
-    num_items = len(paid_items)
-    dp = np.zeros(W + 1, dtype=np.int64)
-    took = np.zeros((num_items, W + 1), dtype=np.uint8)
+        for i, (weight, val, _, _) in enumerate(paid_items):
+            if cancel is not None and cancel():
+                raise AllocationCancelled()
+            if weight > W:
+                continue
+            cand = dp[: W + 1 - weight] + val
+            target = dp[weight:]
+            mask = cand > target
+            target[mask] = cand[mask]
+            took[i, weight:][mask] = 1
 
-    for i, (weight, val, _, _) in enumerate(paid_items):
-        if cancel is not None and cancel():
-            raise AllocationCancelled()
-        if weight > W:
-            continue
-        cand = dp[: W + 1 - weight] + val
-        target = dp[weight:]
-        mask = cand > target
-        target[mask] = cand[mask]
-        took[i, weight:][mask] = 1
+        best_c = int(np.argmax(dp))
 
-    best_c = int(np.argmax(dp))
-
-    curr = best_c
-    for i in range(num_items - 1, -1, -1):
-        if took[i, curr]:
-            weight, _, piece, prod_idx = paid_items[i]
-            recommendations[prod_idx].allocated_units += piece
-            curr -= weight
+        curr = best_c
+        for i in range(num_items - 1, -1, -1):
+            if took[i, curr]:
+                weight, _, piece, prod_idx = paid_items[i]
+                recommendations[prod_idx].allocated_units += piece
+                curr -= weight
 
     total_spent = 0.0
     for prod in recommendations:
@@ -267,7 +303,7 @@ def allocate_knapsack(
         prod.allocated_cost = round(prod.allocated_units * prod.unit_cost, 2)
         total_spent += prod.allocated_cost
 
-    remaining_budget = round(max(0.0, budget - total_spent), 2)
+    remaining_budget = round(max(0.0, total_budget - total_spent), 2)
     return recommendations, remaining_budget
 
 
@@ -276,14 +312,18 @@ def allocate_budget(
     budget: float,
     method: str = "Greedy",
     cancel: Optional[Callable[[], bool]] = None,
+    balanced_share: float = 0.0,
 ) -> Tuple[List[ProductRecommendation], float]:
     """
-    Allocates budget using 'Greedy', 'Bounded Knapsack', or 'Even Distribution'.
+    Allocates budget using:
+    - 'Greedy' (with optional balanced_share % allocated via Balanced Base first)
+    - 'Bounded Knapsack' (with optional balanced_share % allocated via Balanced Base first)
+    - 'Balanced Budget' / 'Even Distribution' (100% balanced budget distribution)
     """
     m_lower = method.lower()
     if m_lower in ("bounded knapsack", "knapsack"):
-        return allocate_knapsack(recommendations, budget, cancel=cancel)
-    elif m_lower in ("even", "even distribution", "even distribution (variety)", "variety"):
-        return allocate_even(recommendations, budget, cancel=cancel)
+        return allocate_knapsack(recommendations, budget, cancel=cancel, balanced_share=balanced_share)
+    elif m_lower in ("even", "even distribution", "even distribution (variety)", "variety", "balanced", "balanced budget"):
+        return allocate_even(recommendations, budget, cancel=cancel, reset=True)
     else:
-        return allocate_greedy(recommendations, budget, cancel=cancel)
+        return allocate_greedy(recommendations, budget, cancel=cancel, balanced_share=balanced_share)
