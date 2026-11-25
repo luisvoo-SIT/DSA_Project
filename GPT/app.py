@@ -124,8 +124,10 @@ class MainWindow(QMainWindow):
             frame=frame.loc[mask]
         frame=frame.sort_values(self.sort_column.currentText(),ascending=self.sort_order.currentText()=='Ascending',kind='stable')
         return frame['_record'].tolist()
-    def draw_recommendations(self, rows):
+    def draw_recommendations(self, rows, remaining_budget=None):
         fig=self.recommendation_figure; fig.clear(); ax=fig.add_subplot(111)
+        # Reserve a footer so the budget stays clear of bars, labels and legend.
+        fig.get_layout_engine().set(rect=(0, .10, 1, .90))
         if not rows: ax.text(.5,.5,'No recommendations to display',ha='center',va='center',transform=ax.transAxes); ax.set_axis_off()
         else:
             frame=pd.DataFrame(rows).head(20).iloc[::-1]
@@ -134,6 +136,9 @@ class MainWindow(QMainWindow):
             ax.barh(positions,frame['need'],label='Indicative need',color='#dce5ec')
             ax.barh(positions,frame['qty'],label='Allocated',color='#218a72')
             ax.set_yticks(positions,labels); ax.set_xlabel('Units'); ax.set_title('Restocking need and allocated units (first 20 ranked products)'); ax.legend(loc='lower right')
+        if remaining_budget is not None:
+            fig.text(.98, .025, f'Remaining budget: ${remaining_budget:,.2f}',
+                     ha='right', va='bottom', fontsize=11, fontweight='bold', color='#218a72')
         self.recommendation_canvas.draw_idle()
     def draw_expiry(self, rows):
         fig=self.expiry_figure; fig.clear(); ax=fig.add_subplot(111)
@@ -230,7 +235,10 @@ class MainWindow(QMainWindow):
         try:
             self.all_results=data
             q=self.search.text().strip().casefold(); shown=[r for r in data if q in r['item_id'].casefold() or q in r['name'].casefold()]
-            self.draw_recommendations(shown)
+            spend=sum(r['qty']*r['cost'] for r in data)
+            spent_cents=sum(r['qty']*int(r['cost']*100) for r in data)
+            remaining_budget=max(0, round(self.budget.value()*100)-spent_cents)/100
+            self.draw_recommendations(shown, remaining_budget)
             self.set_table(self.results,
                 ['Outlet','ID','Product','Report','Sold this month','Expired this month','Replace expired (75%)',
                  'Available stock','New total target','Need','Balanced units','Priority units','Buy','Stock after removal + allocation',
@@ -239,7 +247,6 @@ class MainWindow(QMainWindow):
                   r['latest_sales'],r['expired_this_month'],r['expired_replacement'],r['usable'],r['stock_target'],
                   r['need'],r['balanced_units'],r['priority_units'],r['qty'],r['usable']+r['qty'],f"{r['forecast']:.1f}",r['cost'],r['margin'],r['value'],
                   f"{r['qty']*r['cost']:.2f}",r['loss_source'],r['review']] for r in shown])
-            spend=sum(r['qty']*r['cost'] for r in data)
             funded=sum(r['qty']>0 for r in data)
             eligible=sum(r['need']>0 and r['value']>0 for r in data)
             stage_one=sum(r['balanced_units']*r['cost'] for r in data)
