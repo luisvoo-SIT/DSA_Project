@@ -165,6 +165,7 @@ class RecommendationsView(QWidget):
         self.method_combo = QComboBox()
         self.method_combo.addItem("Greedy (Rank Order)", "Greedy")
         self.method_combo.addItem("Bounded Knapsack (Max Score)", "Knapsack")
+        self.method_combo.addItem("Even Distribution (Variety)", "Even")
         ctrl_layout.addWidget(self.method_combo)
 
         ctrl_layout.addWidget(QLabel("Outlets:"))

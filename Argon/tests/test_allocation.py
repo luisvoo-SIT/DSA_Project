@@ -1,7 +1,7 @@
 import os
 import unittest
 from core.models import ProductRecommendation
-from core.allocation import AllocationCancelled, allocate_greedy, allocate_knapsack, allocate_budget
+from core.allocation import AllocationCancelled, allocate_greedy, allocate_knapsack, allocate_even, allocate_budget
 from core.csv_importer import import_monthly_csv
 from core.restocking import calculate_restocking_recommendations
 
@@ -103,6 +103,48 @@ class TestBudgetAllocation(unittest.TestCase):
     def test_allocation_cancellation(self):
         with self.assertRaises(AllocationCancelled):
             allocate_budget([self.p1, self.p2], 100.0, method="Knapsack", cancel=lambda: True)
+
+
+
+    def test_even_distribution_spreads_budget_across_variety_of_items(self):
+        # 3 products: p2 ($1.50, need 40), p1 ($2.00, need 50), p3 ($5.00, need 20)
+        # Under a $60.00 budget:
+        # - Greedy spends all $60.00 on p2 (40 units) and funds 0 units of p1 and p3 (1 product funded).
+        # - Even Distribution splits $60.00 into $20.00 shares across all 3 products:
+        #   p2 gets 13 units ($19.50), p1 gets 10 units ($20.00), p3 gets 4 units ($20.00) -> all 3 products funded!
+        items_greedy = [
+            ProductRecommendation(**{**self.p2.__dict__}),
+            ProductRecommendation(**{**self.p1.__dict__}),
+            ProductRecommendation(**{**self.p3.__dict__}),
+        ]
+        items_even = [
+            ProductRecommendation(**{**self.p2.__dict__}),
+            ProductRecommendation(**{**self.p1.__dict__}),
+            ProductRecommendation(**{**self.p3.__dict__}),
+        ]
+        allocate_budget(items_greedy, 60.0, method="Greedy")
+        recs_even, rem_even = allocate_budget(items_even, 60.0, method="Even")
+
+        greedy_funded = sum(1 for r in items_greedy if r.allocated_units > 0)
+        even_funded = sum(1 for r in recs_even if r.allocated_units > 0)
+
+        self.assertEqual(greedy_funded, 1)
+        self.assertEqual(even_funded, 3)
+        self.assertEqual(recs_even[0].allocated_units, 13)  # $19.50
+        self.assertEqual(recs_even[1].allocated_units, 10)  # $20.00
+        self.assertEqual(recs_even[2].allocated_units, 4)   # $20.00
+        self.assertEqual(rem_even, 0.50)
+
+    def test_even_distribution_round_robin_on_small_budget(self):
+        # When budget ($9.00) is smaller than equal share for all 3 items, round-robin buys 1 unit of each
+        items = [
+            ProductRecommendation(**{**self.p2.__dict__}),  # $1.50
+            ProductRecommendation(**{**self.p1.__dict__}),  # $2.00
+            ProductRecommendation(**{**self.p3.__dict__}),  # $5.00
+        ]
+        recs, rem = allocate_even(items, 9.0)
+        self.assertEqual([r.allocated_units for r in recs], [1, 1, 1])
+        self.assertEqual(rem, 0.50)
 
 
 if __name__ == "__main__":

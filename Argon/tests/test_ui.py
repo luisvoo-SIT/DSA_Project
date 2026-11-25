@@ -104,5 +104,28 @@ class TestUI(unittest.TestCase):
         self.assertGreater(self.window.recs_view.table_model.rowCount(), 0)
 
 
+
+    def test_even_distribution_method_in_ui_increases_product_variety(self):
+        from core.csv_importer import import_monthly_csv
+        sample_dir = os.path.join(os.path.dirname(__file__), "..", "sample_data")
+        batches = []
+        for month in (9, 10, 11):
+            batches.extend(import_monthly_csv(os.path.join(sample_dir, f"Outlet_Youth_2026_{month:02d}.csv"))[3])
+        view = self.window.recs_view
+        view.budget_spin.setValue(100.0)
+        view.set_master_batches(batches)
+
+        # Greedy at $100.00 funds only the top few products
+        view.method_combo.setCurrentIndex(view.method_combo.findData("Greedy"))
+        greedy_funded = sum(1 for r in view.all_recommendations if r.allocated_units > 0)
+
+        # Switching to Even Distribution (Variety) funds many more products across the assortment
+        view.method_combo.setCurrentIndex(view.method_combo.findData("Even"))
+        even_funded = sum(1 for r in view.all_recommendations if r.allocated_units > 0)
+
+        self.assertGreater(even_funded, greedy_funded)
+        self.assertLessEqual(sum(r.allocated_cost for r in view.all_recommendations), 100.0)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -28,6 +28,7 @@ A PySide6 desktop prototype for viewing monthly outlet inventory, inspecting bat
   - Shared budget allocation across selected outlets:
     - **Greedy Allocation**: Buys in rank order up to the shared budget limit.
     - **Bounded Knapsack Allocation**: Dynamic programming optimization maximizing total additive priority score using integer cents and discrete unit quantities (supported for budgets up to \$1,000.00).
+    - **Even Distribution (Variety) Allocation**: Splits the shared budget into equal dollar shares across eligible products (with round-robin remainder distribution) to restock a wide variety of products.
   - Embedded **Matplotlib** grouped bar chart displaying Need vs Allocated units for the first 20 ranked displayed products.
   - **Balanced Binary Search Tree (AVL Tree)** for exact product ID lookup and linear search for partial name/ID queries.
   - One-click export of all calculated recommendations to CSV (**Export recommendations CSV**).

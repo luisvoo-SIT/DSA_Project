@@ -323,6 +323,7 @@ class ProcessDiagramWindow(QWidget):
         self.method_combo = QComboBox()
         self.method_combo.addItem("Greedy (Rank Order)", "Greedy")
         self.method_combo.addItem("Bounded Knapsack (DP)", "Knapsack")
+        self.method_combo.addItem("Even Distribution (Variety)", "Even")
         r5.addWidget(self.method_combo)
         in_layout.addLayout(r5)
 
